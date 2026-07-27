@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="top-nav">
+  <span class="brand">TAE Exam System</span>
+  <a href="index.html" class="active">Dashboard</a>
+  <a href="history.html">History</a>
+  <a href="analysis.html">Analysis</a>
+  <a href="generate.html">Generate</a>
+</div>
+<div class="container">
+  <div class="page-header">
+    <h1>Exams</h1>
+    <a class="btn" href="generate.html">Generate new exam</a>
+  </div>
+
+  <div class="metric-grid" id="quickStats"></div>
+
+  <div id="examList" class="loading">Loading exams…</div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+async function loadQuickStats() {
+  const el = document.getElementById('quickStats');
+  try {
+    const overview = await Api.getAnalysisOverview();
+    el.innerHTML = `
+      <div class="metric"><div class="metric-label">Attempts submitted</div><div class="metric-value">${overview.overall.totalAttempts}</div></div>
+      <div class="metric"><div class="metric-label">Average score</div><div class="metric-value">${overview.overall.avgPercent}%</div></div>
+      <div class="metric"><div class="metric-label">Pass rate</div><div class="metric-value">${overview.overall.passRate}%</div></div>
+      <div class="metric"><div class="metric-label">Weakest chapter</div><div class="metric-value">${overview.weakestChapters[0] || '—'}</div></div>
+    `;
+  } catch (err) {
+    el.innerHTML = '';
+  }
+}
+
+function typeBadgeClass(type) {
+  if (type === 'Drill') return 'b-weak';
+  if (type === 'Generated') return 'b-scen';
+  return 'b-ch';
+}
+
+async function loadExams() {
+  const el = document.getElementById('examList');
+  try {
+    const exams = await Api.listExams();
+    if (exams.length === 0) {
+      el.className = 'empty-state';
+      el.textContent = 'No exams yet.';
+      return;
+    }
+    el.className = 'card-grid';
+    el.innerHTML = exams.map(e => `
+      <div class="card">
+        <h3>${e.title}</h3>
+        <div class="q-meta">
+          <span class="badge ${typeBadgeClass(e.type)}">${e.type}</span>
+          <span class="meta">${e.questionCount} questions · ${e.totalPoints} pts · pass ${e.passThresholdPoints} pts</span>
+        </div>
+        <div style="margin-top:10px">
+          <a class="btn small" href="exam.html?examId=${e.id}">Take exam</a>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+loadQuickStats();
+loadExams();
+</script>
+</body>
+</html>

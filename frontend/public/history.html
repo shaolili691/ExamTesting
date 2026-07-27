@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>History — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="top-nav">
+  <span class="brand">TAE Exam System</span>
+  <a href="index.html">Dashboard</a>
+  <a href="history.html" class="active">History</a>
+  <a href="analysis.html">Analysis</a>
+  <a href="generate.html">Generate</a>
+</div>
+<div class="container">
+  <div class="page-header"><h1>Attempt history</h1></div>
+  <div id="content" class="loading">Loading…</div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+function statusBadge(a) {
+  if (a.status !== 'Submitted') return '<span class="badge b-k3">In progress</span>';
+  return a.passed ? '<span class="badge b-pass">Pass</span>' : '<span class="badge b-fail">Fail</span>';
+}
+
+async function load() {
+  const el = document.getElementById('content');
+  try {
+    const attempts = await Api.listAttempts();
+    if (attempts.length === 0) {
+      el.className = 'empty-state';
+      el.textContent = 'No attempts yet — take an exam from the dashboard first.';
+      return;
+    }
+    el.className = '';
+    el.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Exam</th><th>Type</th><th>Score</th><th>Result</th><th>Submitted</th><th></th></tr></thead>
+        <tbody>
+          ${attempts.map(a => `
+            <tr>
+              <td>${a.examTitle}</td>
+              <td>${a.examType}</td>
+              <td>${a.status === 'Submitted' ? `${a.score}/${a.maxScore} (${a.percentScore}%)` : '—'}</td>
+              <td>${statusBadge(a)}</td>
+              <td>${a.submittedAtUtc ? new Date(a.submittedAtUtc).toLocaleString() : '—'}</td>
+              <td>
+                <a class="btn small secondary" href="attempt.html?attemptId=${a.id}">Review</a>
+                ${a.status === 'Submitted' ? `<a class="btn small" href="drill.html?attemptId=${a.id}">Targeted practice</a>` : ''}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

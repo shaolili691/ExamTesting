@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attempt Review — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="top-nav">
+  <span class="brand">TAE Exam System</span>
+  <a href="index.html">Dashboard</a>
+  <a href="history.html" class="active">History</a>
+  <a href="analysis.html">Analysis</a>
+  <a href="generate.html">Generate</a>
+</div>
+<div class="container">
+  <div class="page-header"><h1 id="pageTitle">Attempt review</h1></div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('review')">Results</button>
+    <button class="tab-btn" onclick="showTab('answers')">Answer key</button>
+  </div>
+
+  <div id="review" class="tab-panel show"><div id="reviewContent" class="loading">Loading…</div></div>
+  <div id="answers" class="tab-panel"><div id="answerContent"></div></div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const attemptId = Number(params.get('attemptId'));
+
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('show'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(name).classList.add('show');
+  const idx = { review: 0, answers: 1 }[name];
+  document.querySelectorAll('.tab-btn')[idx].classList.add('active');
+}
+
+function chapterBadge(chapter) { return `<span class="badge b-ch">${chapter}</span>`; }
+
+function renderAnswerKey(result) {
+  const rows = result.questions.map(q => `
+    <tr>
+      <td>${chapterBadge(q.chapter)}</td>
+      <td>${q.points}</td>
+      <td class="key-ans">${q.correctIndexes.map(i => q.options[i]).join(', ')}</td>
+      <td>${q.explanation}</td>
+    </tr>`).join('');
+  document.getElementById('answerContent').innerHTML = `
+    <table class="key-table">
+      <thead><tr><th>Ch</th><th>Pts</th><th>Correct answer</th><th>Explanation</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderResults(result) {
+  document.getElementById('pageTitle').textContent = `Attempt review — ${result.examTitle}`;
+  const pct = result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0;
+  const chCards = result.chapterBreakdown.map(c => `
+    <div class="ch-card">
+      <div class="ch-card-title">${c.chapter} — ${c.chapterTitle}</div>
+      <div class="ch-card-score">${c.correct}/${c.total} · ${c.pointsEarned}/${c.pointsMax} pts</div>
+    </div>`).join('');
+  const cards = result.questions.map(q => {
+    const answered = q.selectedIndexes.length > 0;
+    const cls = !answered ? 'skipped' : (q.isCorrect ? 'correct' : 'wrong');
+    const yourAnswer = answered ? q.selectedIndexes.map(i => q.options[i]).join(', ') : '(skipped)';
+    const answerCls = !answered ? 'ans-skip-text' : (q.isCorrect ? 'ans-correct-text' : 'ans-wrong-text');
+    return `
+      <div class="ans-card ${cls}">
+        <div class="ans-qnum">${q.chapter} · ${q.pointsAwarded}/${q.points} pts</div>
+        <div class="ans-answer ${answerCls}">${yourAnswer}</div>
+        <div class="ans-expl">${q.explanation}</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('reviewContent').innerHTML = `
+    <div class="result-header">
+      <div class="result-score">${result.score} / ${result.maxScore} pts</div>
+      <div class="result-pct">${pct}%</div>
+      <div class="result-msg ${result.passed ? 'pass-msg' : 'fail-msg'}">${result.passed ? 'Pass' : 'Not yet — keep practicing'}</div>
+    </div>
+    <div class="ch-summary">${chCards}</div>
+    <div class="section-title">Question-by-question review</div>
+    <div class="ans-grid">${cards}</div>
+  `;
+}
+
+async function load() {
+  try {
+    const result = await Api.getAttempt(attemptId);
+    renderResults(result);
+    renderAnswerKey(result);
+  } catch (err) {
+    document.getElementById('reviewContent').innerHTML = `<p class="empty-state">${err.message}</p>`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

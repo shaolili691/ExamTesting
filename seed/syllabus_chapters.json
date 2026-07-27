@@ -1,0 +1,58 @@
+[
+  {
+    "code": "Ch1",
+    "number": 1,
+    "title": "Introduction and Objectives for Test Automation",
+    "studyMinutes": 45,
+    "kLevel": "K2"
+  },
+  {
+    "code": "Ch2",
+    "number": 2,
+    "title": "Preparing for Test Automation",
+    "studyMinutes": 180,
+    "kLevel": "K4"
+  },
+  {
+    "code": "Ch3",
+    "number": 3,
+    "title": "Test Automation Architecture",
+    "studyMinutes": 210,
+    "kLevel": "K3"
+  },
+  {
+    "code": "Ch4",
+    "number": 4,
+    "title": "Implementing Test Automation",
+    "studyMinutes": 150,
+    "kLevel": "K4"
+  },
+  {
+    "code": "Ch5",
+    "number": 5,
+    "title": "Implementation and Deployment Strategies for Test Automation",
+    "studyMinutes": 90,
+    "kLevel": "K3"
+  },
+  {
+    "code": "Ch6",
+    "number": 6,
+    "title": "Test Automation Reporting and Metrics",
+    "studyMinutes": 150,
+    "kLevel": "K4"
+  },
+  {
+    "code": "Ch7",
+    "number": 7,
+    "title": "Verifying the Test Automation Solution",
+    "studyMinutes": 135,
+    "kLevel": "K3"
+  },
+  {
+    "code": "Ch8",
+    "number": 8,
+    "title": "Continuous Improvement",
+    "studyMinutes": 210,
+    "kLevel": "K4"
+  }
+]

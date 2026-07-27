@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analysis — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="top-nav">
+  <span class="brand">TAE Exam System</span>
+  <a href="index.html">Dashboard</a>
+  <a href="history.html">History</a>
+  <a href="analysis.html" class="active">Analysis</a>
+  <a href="generate.html">Generate</a>
+</div>
+<div class="container">
+  <div class="page-header"><h1>Analysis</h1></div>
+  <div id="content" class="loading">Loading…</div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+function bar(label, pct, sub) {
+  const safePct = Math.max(0, Math.min(100, pct));
+  return `
+    <div class="bar-row">
+      <div class="bar-label">${label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${safePct}%"></div></div>
+      <div class="bar-value">${pct}%</div>
+    </div>${sub ? `<div style="margin:-4px 0 8px 200px;font-size:11px;color:var(--text-muted)">${sub}</div>` : ''}`;
+}
+
+async function load() {
+  const el = document.getElementById('content');
+  try {
+    const o = await Api.getAnalysisOverview();
+    if (o.overall.totalAttempts === 0) {
+      el.className = 'empty-state';
+      el.textContent = 'No submitted attempts yet — take an exam first to see analysis.';
+      return;
+    }
+    el.className = '';
+
+    const chapterBars = o.byChapter.map(c => bar(`${c.chapter} — ${c.chapterTitle}`, c.accuracyPct, `${c.correct}/${c.questionsSeen} correct`)).join('');
+    const topicRows = o.byTopic.length ? o.byTopic.map(t => `<tr><td>${t.topic}</td><td>${t.correct}/${t.questionsSeen}</td><td>${t.accuracyPct}%</td></tr>`).join('')
+      : '<tr><td colspan="3" class="empty-state">No topic-tagged questions answered yet.</td></tr>';
+    const trendRows = o.trend.slice().reverse().map(t => `<tr><td>#${t.attemptId}</td><td>${new Date(t.submittedAtUtc).toLocaleString()}</td><td>${t.percentScore}%</td></tr>`).join('');
+
+    el.innerHTML = `
+      <div class="metric-grid">
+        <div class="metric"><div class="metric-label">Total attempts</div><div class="metric-value">${o.overall.totalAttempts}</div></div>
+        <div class="metric"><div class="metric-label">Average score</div><div class="metric-value">${o.overall.avgPercent}%</div></div>
+        <div class="metric"><div class="metric-label">Pass rate</div><div class="metric-value">${o.overall.passRate}%</div></div>
+        <div class="metric"><div class="metric-label">Weakest chapters</div><div class="metric-value" style="font-size:14px">${o.weakestChapters.join(', ')}</div></div>
+      </div>
+
+      <div class="section-title">Accuracy by chapter</div>
+      <div class="card">${chapterBars}</div>
+
+      <div class="section-title">Accuracy by topic (application-style questions only)</div>
+      <div class="card">
+        <table class="data-table">
+          <thead><tr><th>Topic</th><th>Correct</th><th>Accuracy</th></tr></thead>
+          <tbody>${topicRows}</tbody>
+        </table>
+      </div>
+
+      <div class="section-title">Trend (most recent first)</div>
+      <div class="card">
+        <table class="data-table">
+          <thead><tr><th>Attempt</th><th>Submitted</th><th>Score</th></tr></thead>
+          <tbody>${trendRows}</tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

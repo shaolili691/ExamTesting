@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Take Exam — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="top-nav">
+  <span class="brand">TAE Exam System</span>
+  <a href="index.html">Dashboard</a>
+  <a href="history.html">History</a>
+  <a href="analysis.html">Analysis</a>
+  <a href="generate.html">Generate</a>
+</div>
+<div class="container">
+  <h1 id="examTitle" style="font-size:18px;font-weight:600;margin:12px 0 18px">Loading…</h1>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('exam')">Exam paper</button>
+    <button class="tab-btn" onclick="showTab('answers')" id="answersTab">Answer key</button>
+    <button class="tab-btn" onclick="showTab('review')" id="reviewTab">Results</button>
+  </div>
+
+  <div id="exam" class="tab-panel show">
+    <div class="exam-header">
+      <div class="stat-row" id="statRow"></div>
+      <button class="btn" id="submitBtn" onclick="submitExam()">Submit and score</button>
+    </div>
+    <div class="filter-row" id="filterRow"></div>
+    <div id="qlist"></div>
+  </div>
+
+  <div id="answers" class="tab-panel">
+    <div id="answerContent"><p class="no-data">Submit the exam first to see the answer key.</p></div>
+  </div>
+
+  <div id="review" class="tab-panel">
+    <div id="reviewContent"><p class="no-data">Submit the exam first to see your results.</p></div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const examId = Number(params.get('examId'));
+
+let paper = null;
+let attemptId = null;
+let submitted = false;
+const userAnswers = {}; // examQuestionId -> number[]
+let activeChapterFilter = 'All';
+
+function showTab(name) {
+  if ((name === 'answers' || name === 'review') && !submitted) return;
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('show'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(name).classList.add('show');
+  const idx = { exam: 0, answers: 1, review: 2 }[name];
+  document.querySelectorAll('.tab-btn')[idx].classList.add('active');
+}
+
+function chapterBadge(chapter) { return `<span class="badge b-ch">${chapter}</span>`; }
+function levelBadge(level) { return level ? `<span class="badge b-k${level.slice(1)}">${level}</span>` : ''; }
+function scenarioBadge(isScenario) { return isScenario ? `<span class="badge b-scen">Scenario</span>` : ''; }
+
+function buildFilterRow() {
+  const chapters = [...new Set(paper.questions.map(q => q.chapter))].sort();
+  const row = document.getElementById('filterRow');
+  row.innerHTML = ['All', ...chapters].map(ch =>
+    `<button class="filter-btn ${ch === activeChapterFilter ? 'sel' : ''}" onclick="setFilter('${ch}')">${ch}</button>`
+  ).join('');
+}
+
+function setFilter(chapter) {
+  activeChapterFilter = chapter;
+  buildFilterRow();
+  renderQuestions();
+}
+
+function renderQuestions() {
+  const list = document.getElementById('qlist');
+  const questions = paper.questions.filter(q => activeChapterFilter === 'All' || q.chapter === activeChapterFilter);
+  list.innerHTML = questions.map((q, i) => {
+    const selected = userAnswers[q.examQuestionId] || [];
+    const inputType = q.isMultiChoice ? 'checkbox' : 'radio';
+    const opts = q.options.map((opt, oi) => `
+      <label class="opt">
+        <input type="${inputType}" name="q-${q.examQuestionId}" value="${oi}"
+          ${selected.includes(oi) ? 'checked' : ''} ${submitted ? 'disabled' : ''}
+          onchange="recordAnswer(${q.examQuestionId}, ${oi}, ${q.isMultiChoice})">
+        <span>${opt}</span>
+      </label>`).join('');
+    return `
+      <div class="q-block ${q.isScenario ? 'app-q' : ''}">
+        <div class="q-meta">
+          ${chapterBadge(q.chapter)} ${levelBadge(q.level)} ${scenarioBadge(q.isScenario)}
+          <span class="meta" style="font-size:11px;color:var(--text-muted)">Q${q.orderIndex + 1} · ${q.points} pt${q.points > 1 ? 's' : ''}</span>
+        </div>
+        ${q.scenarioText ? `<div class="q-scenario">${q.scenarioText}</div>` : ''}
+        <div class="q-text">${q.questionText}</div>
+        <div class="q-opts">${opts}</div>
+        ${q.isMultiChoice ? '<div class="sel-note">Select all that apply.</div>' : ''}
+      </div>`;
+  }).join('');
+}
+
+function recordAnswer(examQuestionId, optionIndex, isMulti) {
+  if (!userAnswers[examQuestionId]) userAnswers[examQuestionId] = [];
+  if (isMulti) {
+    const arr = userAnswers[examQuestionId];
+    const pos = arr.indexOf(optionIndex);
+    if (pos >= 0) arr.splice(pos, 1); else arr.push(optionIndex);
+  } else {
+    userAnswers[examQuestionId] = [optionIndex];
+  }
+  updateAnsweredCount();
+}
+
+function updateAnsweredCount() {
+  const answered = Object.values(userAnswers).filter(a => a.length > 0).length;
+  const el = document.getElementById('answeredCount');
+  if (el) el.textContent = answered;
+}
+
+function renderStatRow() {
+  document.getElementById('statRow').innerHTML = `
+    <div class="stat">Questions: <span>${paper.questions.length}</span></div>
+    <div class="stat">Total: <span>${paper.totalPoints}</span> pts</div>
+    <div class="stat">Pass: <span>${paper.passThresholdPoints} pts</span></div>
+    <div class="stat">Answered: <span id="answeredCount">0</span>/${paper.questions.length}</div>
+  `;
+}
+
+async function submitExam() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Scoring…';
+  try {
+    const answers = Object.entries(userAnswers).map(([examQuestionId, selectedIndexes]) => ({
+      examQuestionId: Number(examQuestionId),
+      selectedIndexes,
+    }));
+    const result = await Api.submitAttempt(attemptId, answers);
+    submitted = true;
+    document.getElementById('answersTab').style.display = '';
+    document.getElementById('reviewTab').style.display = '';
+    renderAnswerKey(result);
+    renderResults(result);
+    renderQuestions();
+    showTab('review');
+  } catch (err) {
+    alert('Could not submit: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Submit and score';
+  }
+}
+
+function renderAnswerKey(result) {
+  const rows = result.questions.map(q => `
+    <tr>
+      <td>${chapterBadge(q.chapter)}</td>
+      <td>${q.points}</td>
+      <td class="key-ans">${q.correctIndexes.map(i => q.options[i]).join(', ')}</td>
+      <td>${q.explanation}</td>
+    </tr>`).join('');
+  document.getElementById('answerContent').innerHTML = `
+    <table class="key-table">
+      <thead><tr><th>Ch</th><th>Pts</th><th>Correct answer</th><th>Explanation</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderResults(result) {
+  const pct = result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0;
+  const chCards = result.chapterBreakdown.map(c => `
+    <div class="ch-card">
+      <div class="ch-card-title">${c.chapter} — ${c.chapterTitle}</div>
+      <div class="ch-card-score">${c.correct}/${c.total} · ${c.pointsEarned}/${c.pointsMax} pts</div>
+    </div>`).join('');
+  const cards = result.questions.map(q => {
+    const answered = q.selectedIndexes.length > 0;
+    const cls = !answered ? 'skipped' : (q.isCorrect ? 'correct' : 'wrong');
+    const yourAnswer = answered ? q.selectedIndexes.map(i => q.options[i]).join(', ') : '(skipped)';
+    const answerCls = !answered ? 'ans-skip-text' : (q.isCorrect ? 'ans-correct-text' : 'ans-wrong-text');
+    return `
+      <div class="ans-card ${cls}">
+        <div class="ans-qnum">${q.chapter} · ${q.pointsAwarded}/${q.points} pts</div>
+        <div class="ans-answer ${answerCls}">${yourAnswer}</div>
+        <div class="ans-expl">${q.explanation}</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('reviewContent').innerHTML = `
+    <div class="result-header">
+      <div class="result-score">${result.score} / ${result.maxScore} pts</div>
+      <div class="result-pct">${pct}%</div>
+      <div class="result-msg ${result.passed ? 'pass-msg' : 'fail-msg'}">${result.passed ? 'Pass' : 'Not yet — keep practicing'}</div>
+    </div>
+    <div class="ch-summary">${chCards}</div>
+    <div class="section-title">Question-by-question review</div>
+    <div class="ans-grid">${cards}</div>
+  `;
+}
+
+async function init() {
+  document.getElementById('answersTab').style.display = 'none';
+  document.getElementById('reviewTab').style.display = 'none';
+  try {
+    paper = await Api.getExam(examId);
+    document.getElementById('examTitle').textContent = paper.title;
+    renderStatRow();
+    buildFilterRow();
+    renderQuestions();
+    const started = await Api.startAttempt(examId);
+    attemptId = started.attemptId;
+  } catch (err) {
+    document.getElementById('examTitle').textContent = 'Could not load exam';
+    document.getElementById('qlist').innerHTML = `<p class="empty-state">${err.message}</p>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>

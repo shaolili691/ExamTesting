@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Targeted Practice — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="top-nav">
+  <span class="brand">TAE Exam System</span>
+  <a href="index.html">Dashboard</a>
+  <a href="history.html" class="active">History</a>
+  <a href="analysis.html">Analysis</a>
+  <a href="generate.html">Generate</a>
+</div>
+<div class="container">
+  <div class="page-header"><h1>Targeted practice</h1></div>
+  <div id="content" class="loading">Building your drill from this attempt's weak areas…</div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const attemptId = Number(params.get('attemptId'));
+
+async function build() {
+  const el = document.getElementById('content');
+  try {
+    const result = await Api.generateDrill(attemptId, {});
+    const weakest = result.weakAreaSummary.slice(0, 3);
+    const weakText = weakest.map(c => `${c.chapter} (${c.accuracyPct}% on ${c.questionsSeen} questions)`).join(', ');
+
+    el.className = '';
+    el.innerHTML = `
+      <div class="weak-banner">
+        This drill focuses on the areas you missed in attempt #${attemptId}, weighted toward your weakest chapters: ${weakText || 'n/a'}.
+      </div>
+      <div class="metric-grid">
+        <div class="metric"><div class="metric-label">Missed questions included</div><div class="metric-value">${result.coreWrongCount}</div></div>
+        <div class="metric"><div class="metric-label">Additional practice questions</div><div class="metric-value">${result.fillCount}</div></div>
+        <div class="metric"><div class="metric-label">Total drill size</div><div class="metric-value">${result.coreWrongCount + result.fillCount}</div></div>
+      </div>
+      ${result.warnings.length ? `<div class="meta" style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${result.warnings.join(' ')}</div>` : ''}
+      <a class="btn" href="exam.html?examId=${result.examId}">Start targeted practice</a>
+    `;
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not build a drill: ' + err.message;
+  }
+}
+
+build();
+</script>
+</body>
+</html>
