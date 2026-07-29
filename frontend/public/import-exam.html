@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Import Exam — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+<style>
+.draft-card { border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; background: var(--surface-2); }
+.draft-card.has-flags { border-left: 3px solid var(--orange-border); }
+.draft-row { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.draft-row .field { flex: 1; min-width: 140px; }
+.draft-row label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; }
+.draft-row select, .draft-row input[type=number] { width: 100%; padding: 6px 8px; border-radius: var(--radius); border: 0.5px solid var(--border-strong); background: var(--surface-1); color: var(--text-primary); font-size: 12px; }
+.draft-textarea { width: 100%; padding: 8px 10px; border-radius: var(--radius); border: 0.5px solid var(--border-strong); background: var(--surface-1); color: var(--text-primary); font-size: 12px; font-family: inherit; resize: vertical; }
+.draft-option-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 5px; }
+.draft-option-row input[type=text] { flex: 1; padding: 6px 8px; border-radius: var(--radius); border: 0.5px solid var(--border-strong); background: var(--surface-1); color: var(--text-primary); font-size: 12px; }
+.draft-flags { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
+<div class="container">
+  <div class="page-header"><h1>Import exam from PDF</h1></div>
+  <p class="meta" style="color:var(--text-secondary);font-size:13px;margin-top:-8px">
+    Upload the official ISTQB CTAL-TAE "Sample Exam" questions PDF, optionally with its matching answers PDF.
+    Every extracted question can be reviewed and corrected below before it's saved as a real exam.
+  </p>
+
+  <div class="card" id="step1" style="max-width:640px">
+    <h3>Step 1 — Upload</h3>
+    <div class="form-row"><label for="questionsFile">Questions PDF (required)</label><input type="file" id="questionsFile" accept=".pdf"></div>
+    <div class="form-row"><label for="answersFile">Answers PDF (optional, recommended)</label><input type="file" id="answersFile" accept=".pdf"></div>
+    <button class="btn" id="parseBtn" onclick="parseFiles()">Parse</button>
+    <div id="parseStatus" style="margin-top:10px;font-size:12px;color:var(--text-secondary)"></div>
+  </div>
+
+  <div id="step2" style="display:none">
+    <div id="warningsBanner"></div>
+    <div class="card" style="max-width:480px">
+      <div class="form-row"><label for="examTitle">Exam title</label><input type="text" id="examTitle"></div>
+      <div class="form-row">
+        <label for="examCategory">Category</label>
+        <select id="examCategory" style="width:100%;padding:8px 10px;border-radius:var(--radius);border:0.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary)"></select>
+      </div>
+      <button class="btn" id="saveBtn" onclick="saveExam()">Save as exam</button>
+      <div id="saveStatus" style="margin-top:10px;font-size:12px;color:var(--text-secondary)"></div>
+    </div>
+    <div id="draftList"></div>
+    <button class="btn" onclick="saveExam()">Save as exam</button>
+  </div>
+</div>
+</div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+const me = Auth.getUser();
+if (!me || !['Administrator', 'Teacher'].includes(me.roleName)) {
+  location.href = 'index.html';
+}
+
+const FLAG_LABELS = {
+  NoAnswerKeyProvided: 'No answer key uploaded — enter chapter/answer manually',
+  NoMatchingAnswerEntry: 'No matching answer entry found — enter manually',
+  ChapterNotDetected: 'Chapter not detected — please select',
+  ChapterOutOfRange: 'Detected chapter was invalid — please select',
+  CorrectAnswerNotDetected: 'Correct answer not detected — please select',
+  ExplanationNotDetected: 'Explanation not detected — consider adding one',
+  AnswerCountMismatch: 'Number of correct answers looks inconsistent — please verify',
+};
+
+let chapters = [];
+let draftQuestions = [];
+let categories = [];
+
+async function loadCategories() {
+  try {
+    categories = await Api.getExamCategories();
+    const selected = localStorage.getItem('tae_category');
+    document.getElementById('examCategory').innerHTML = categories
+      .map(c => `<option value="${c.id}" ${String(c.id) === selected ? 'selected' : ''}>${c.name}</option>`)
+      .join('');
+  } catch (err) { /* category select stays empty; saveExam() will catch the missing selection */ }
+}
+loadCategories();
+
+async function parseFiles() {
+  const btn = document.getElementById('parseBtn');
+  const status = document.getElementById('parseStatus');
+  const questionsFile = document.getElementById('questionsFile').files[0];
+  const answersFile = document.getElementById('answersFile').files[0];
+  if (!questionsFile) {
+    status.textContent = 'Please choose a questions PDF.';
+    return;
+  }
+  btn.disabled = true;
+  status.textContent = 'Parsing… this can take a few seconds.';
+  try {
+    chapters = await Api.getSyllabusChapters();
+    const result = await Api.previewExamImport(questionsFile, answersFile);
+    draftQuestions = result.questions;
+    renderWarnings(result.warnings, result.answersFileProvided);
+    renderDrafts();
+    document.getElementById('step1').style.display = 'none';
+    document.getElementById('step2').style.display = '';
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderWarnings(warnings, answersProvided) {
+  const el = document.getElementById('warningsBanner');
+  const lines = [...warnings];
+  if (!answersProvided) lines.unshift('No answers file was uploaded — every question needs its chapter and correct answer(s) entered manually below.');
+  el.innerHTML = lines.length ? `<div class="weak-banner">${lines.join('<br>')}</div>` : '';
+}
+
+function chapterOptions(selected) {
+  const opts = ['<option value="">— select —</option>']
+    .concat(chapters.map(c => `<option value="${c.code}" ${c.code === selected ? 'selected' : ''}>${c.code} — ${c.title}</option>`));
+  return opts.join('');
+}
+
+function renderDrafts() {
+  const el = document.getElementById('draftList');
+  el.innerHTML = draftQuestions.map((q, qi) => {
+    const flagBadges = q.flags.map(f => `<span class="badge b-weak">${FLAG_LABELS[f] || f}</span>`).join(' ');
+    const optionsHtml = q.options.map((opt, oi) => `
+      <div class="draft-option-row">
+        <input type="checkbox" ${q.correctIndexes.includes(oi) ? 'checked' : ''} onchange="toggleCorrect(${qi}, ${oi}, this.checked)">
+        <input type="text" value="${escapeAttr(opt)}" oninput="draftQuestions[${qi}].options[${oi}] = this.value">
+      </div>`).join('');
+
+    return `
+      <div class="draft-card ${q.flags.length ? 'has-flags' : ''}">
+        <div class="draft-row">
+          <div class="field" style="flex:0 0 60px"><label>Q#</label><div style="padding-top:6px;font-weight:600">${q.questionNumber}</div></div>
+          <div class="field" style="flex:0 0 200px">
+            <label>Chapter</label>
+            <select onchange="draftQuestions[${qi}].chapter = this.value">${chapterOptions(q.chapter)}</select>
+          </div>
+          <div class="field" style="flex:0 0 90px">
+            <label>Level</label>
+            <select onchange="draftQuestions[${qi}].level = this.value">
+              ${['', 'K2', 'K3', 'K4'].map(l => `<option value="${l}" ${l === (q.level || '') ? 'selected' : ''}>${l || '—'}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field" style="flex:0 0 90px">
+            <label>Points</label>
+            <input type="number" min="1" value="${q.points}" oninput="draftQuestions[${qi}].points = Number(this.value) || 1">
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Question text</label>
+          <textarea class="draft-textarea" rows="2" oninput="draftQuestions[${qi}].questionText = this.value">${escapeHtml(q.questionText)}</textarea>
+        </div>
+        <label style="font-size:11px;color:var(--text-secondary)">Options (check the correct one(s))</label>
+        ${optionsHtml}
+        <div class="form-row" style="margin-top:8px">
+          <label>Explanation</label>
+          <textarea class="draft-textarea" rows="2" oninput="draftQuestions[${qi}].explanation = this.value">${escapeHtml(q.explanation)}</textarea>
+        </div>
+        ${flagBadges ? `<div class="draft-flags">${flagBadges}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function toggleCorrect(qi, oi, checked) {
+  const arr = draftQuestions[qi].correctIndexes;
+  const pos = arr.indexOf(oi);
+  if (checked && pos < 0) arr.push(oi);
+  if (!checked && pos >= 0) arr.splice(pos, 1);
+  draftQuestions[qi].isMultiChoice = arr.length > 1;
+}
+
+function escapeHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escapeAttr(s) {
+  return escapeHtml(s).replace(/"/g, '&quot;');
+}
+
+async function saveExam() {
+  const status = document.getElementById('saveStatus');
+  const title = document.getElementById('examTitle').value.trim();
+  if (!title) {
+    status.textContent = 'Please enter an exam title.';
+    return;
+  }
+  const categoryId = Number(document.getElementById('examCategory').value);
+  if (!categoryId) {
+    status.textContent = 'Please choose a category.';
+    return;
+  }
+  const badRows = [];
+  draftQuestions.forEach((q, i) => {
+    if (!q.chapter) badRows.push(`Q${q.questionNumber}: chapter is required`);
+    if (q.correctIndexes.length === 0) badRows.push(`Q${q.questionNumber}: select at least one correct answer`);
+  });
+  if (badRows.length > 0) {
+    status.innerHTML = 'Please fix before saving:<br>' + badRows.join('<br>');
+    return;
+  }
+
+  status.textContent = 'Saving…';
+  try {
+    const payload = {
+      title,
+      categoryId,
+      questions: draftQuestions.map(q => ({
+        chapter: q.chapter,
+        level: q.level || null,
+        topic: q.topic || null,
+        isScenario: q.isScenario,
+        scenarioText: q.scenarioText || null,
+        questionText: q.questionText,
+        options: q.options,
+        correctIndexes: q.correctIndexes,
+        isMultiChoice: q.isMultiChoice,
+        points: q.points,
+        explanation: q.explanation,
+        distractorDesign: null,
+      })),
+    };
+    const result = await Api.confirmExamImport(payload);
+    status.textContent = `Saved as exam #${result.examId} (${result.questionCount} questions, ${result.totalPoints} pts). Redirecting…`;
+    location.href = `exam.html?examId=${result.examId}`;
+  } catch (err) {
+    status.innerHTML = 'Error: ' + err.message + (err.details ? '<br>' + err.details.join('<br>') : '');
+  }
+}
+</script>
+</body>
+</html>

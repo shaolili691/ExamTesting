@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Role Permissions — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
+<div class="container">
+  <div class="page-header"><h1>Role Permissions</h1></div>
+  <p style="font-size:12px;color:var(--text-secondary);margin:-8px 0 16px">
+    Controls which of the three roles can use each menu item / API action. Administrator always keeps
+    "Manage users" and "Manage role permissions" — those two checkboxes can't be unchecked here.
+  </p>
+  <div id="permStatus" style="margin-bottom:10px;font-size:12px;color:var(--orange-text)"></div>
+  <div id="content" class="loading">Loading…</div>
+</div>
+</div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
+const ROLES = ['Administrator', 'Teacher', 'Student'];
+
+function checkboxId(key, role) {
+  return `perm-${key}-${role}`;
+}
+
+async function load() {
+  const el = document.getElementById('content');
+  try {
+    const rows = await Api.getRolePermissions();
+    el.className = '';
+    el.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Permission</th>${ROLES.map(r => `<th>${r}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${rows.map(row => `
+            <tr>
+              <td>${row.label}<div style="font-size:11px;color:var(--text-muted)">${row.key}</div></td>
+              ${ROLES.map(r => `
+                <td>
+                  <input type="checkbox" id="${checkboxId(row.key, r)}" ${row.roles.includes(r) ? 'checked' : ''}
+                    onchange="toggle('${row.key}', '${r}', this)">
+                </td>`).join('')}
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+async function toggle(key, role, checkbox) {
+  const status = document.getElementById('permStatus');
+  status.textContent = '';
+  const allowed = checkbox.checked;
+  checkbox.disabled = true;
+  try {
+    await Api.updateRolePermission(key, role, allowed);
+  } catch (err) {
+    checkbox.checked = !allowed;
+    status.textContent = 'Could not update: ' + err.message;
+  } finally {
+    checkbox.disabled = false;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

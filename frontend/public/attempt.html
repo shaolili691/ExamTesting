@@ -7,13 +7,10 @@
 <link rel="stylesheet" href="css/shared.css">
 </head>
 <body>
-<div class="top-nav">
-  <span class="brand">TAE Exam System</span>
-  <a href="index.html">Dashboard</a>
-  <a href="history.html" class="active">History</a>
-  <a href="analysis.html">Analysis</a>
-  <a href="generate.html">Generate</a>
-</div>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
 <div class="container">
   <div class="page-header"><h1 id="pageTitle">Attempt review</h1></div>
 
@@ -25,11 +22,26 @@
   <div id="review" class="tab-panel show"><div id="reviewContent" class="loading">Loading…</div></div>
   <div id="answers" class="tab-panel"><div id="answerContent"></div></div>
 </div>
+</div>
+</div>
 
+<script src="js/auth.js"></script>
 <script src="js/api.js"></script>
+<script src="js/nav.js"></script>
 <script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
 const params = new URLSearchParams(location.search);
 const attemptId = Number(params.get('attemptId'));
+
+function formatDuration(totalSeconds) {
+  if (totalSeconds == null) return null;
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.round((totalSeconds % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
 
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('show'));
@@ -80,7 +92,7 @@ function renderResults(result) {
   document.getElementById('reviewContent').innerHTML = `
     <div class="result-header">
       <div class="result-score">${result.score} / ${result.maxScore} pts</div>
-      <div class="result-pct">${pct}%</div>
+      <div class="result-pct">${pct}%${formatDuration(result.elapsedSeconds) ? ' · Time: ' + formatDuration(result.elapsedSeconds) : ''}</div>
       <div class="result-msg ${result.passed ? 'pass-msg' : 'fail-msg'}">${result.passed ? 'Pass' : 'Not yet — keep practicing'}</div>
     </div>
     <div class="ch-summary">${chCards}</div>

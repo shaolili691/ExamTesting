@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TaeExam.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b9391277e9eaa8b13aca1c45a9033aced80b9fc8")]
 [assembly: System.Reflection.AssemblyProductAttribute("TaeExam.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TaeExam.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

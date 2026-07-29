@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Announcements — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
+<div class="container">
+  <div class="page-header"><h1>Announcements</h1></div>
+
+  <div class="card" style="max-width:560px">
+    <h3>New announcement</h3>
+    <div class="form-row"><label for="title">Title</label><input type="text" id="title"></div>
+    <div class="form-row"><label for="content">Content</label><input type="text" id="content"></div>
+    <div class="form-row"><label for="publishAt">Publish at</label><input type="datetime-local" id="publishAt"></div>
+    <div class="form-row"><label for="expireAt">Expire at (optional)</label><input type="datetime-local" id="expireAt"></div>
+    <div class="form-row"><label for="priority">Priority</label><input type="number" id="priority" value="0"></div>
+    <button class="btn" id="createBtn" onclick="createAnnouncement()">Publish</button>
+    <div id="status" style="margin-top:10px;font-size:12px;color:var(--text-secondary)"></div>
+  </div>
+
+  <div id="content-list" class="loading">Loading…</div>
+</div>
+</div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
+function toIso(localValue) {
+  return localValue ? new Date(localValue).toISOString() : null;
+}
+
+async function loadAnnouncements() {
+  const el = document.getElementById('content-list');
+  try {
+    const items = await Api.listAnnouncements(true);
+    el.className = '';
+    el.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Title</th><th>Content</th><th>Publish</th><th>Expire</th><th>Priority</th><th>By</th></tr></thead>
+        <tbody>
+          ${items.map(a => `
+            <tr>
+              <td>${a.title}</td>
+              <td>${a.content}</td>
+              <td>${new Date(a.publishAtUtc).toLocaleString()}</td>
+              <td>${a.expireAtUtc ? new Date(a.expireAtUtc).toLocaleString() : '—'}</td>
+              <td>${a.priority}</td>
+              <td>${a.createdByUsername}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+async function createAnnouncement() {
+  const btn = document.getElementById('createBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  try {
+    const title = document.getElementById('title').value.trim();
+    const content = document.getElementById('content').value.trim();
+    const publishAtUtc = toIso(document.getElementById('publishAt').value) || new Date().toISOString();
+    const expireAtUtc = toIso(document.getElementById('expireAt').value);
+    const priority = Number(document.getElementById('priority').value) || 0;
+    await Api.createAnnouncement({ title, content, publishAtUtc, expireAtUtc, priority });
+    status.textContent = 'Published.';
+    loadAnnouncements();
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+loadAnnouncements();
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wrong Questions — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
+<div class="container">
+  <div class="page-header"><h1>Wrong question book</h1></div>
+  <p class="meta" style="color:var(--text-secondary);font-size:13px;margin-top:-8px">
+    Every question you've ever gotten wrong or left unanswered, across all your submitted attempts — most recently missed first.
+  </p>
+  <div id="content" class="loading">Loading…</div>
+</div>
+</div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
+function chapterBadge(chapter) { return `<span class="badge b-ch">${chapter}</span>`; }
+function levelBadge(level) { return level ? `<span class="badge b-k${level.slice(1)}">${level}</span>` : ''; }
+
+async function load() {
+  const el = document.getElementById('content');
+  try {
+    const items = await Api.getWrongQuestions();
+    if (items.length === 0) {
+      el.className = 'empty-state';
+      el.textContent = 'No wrong answers recorded yet — nice work, or you haven\'t submitted an attempt.';
+      return;
+    }
+    el.className = '';
+    el.innerHTML = items.map(q => {
+      const yourAnswer = q.lastSelectedIndexes.length > 0
+        ? q.lastSelectedIndexes.map(i => q.options[i]).join(', ')
+        : '(skipped)';
+      const correctAnswer = q.correctIndexes.map(i => q.options[i]).join(', ');
+      return `
+        <div class="q-block weak-q">
+          <div class="q-meta">
+            ${chapterBadge(q.chapter)} ${levelBadge(q.level)}
+            <span class="badge b-weak">Missed ${q.timesMissed}×</span>
+            <span class="meta" style="font-size:11px;color:var(--text-muted)">Last missed ${new Date(q.lastMissedAtUtc).toLocaleDateString()}</span>
+          </div>
+          ${q.scenarioText ? `<div class="q-scenario">${q.scenarioText}</div>` : ''}
+          <div class="q-text">${q.questionText}</div>
+          <div class="ans-card wrong" style="margin-bottom:6px">
+            <div class="ans-qnum">Your last answer</div>
+            <div class="ans-answer ans-wrong-text">${yourAnswer}</div>
+          </div>
+          <div class="ans-card correct">
+            <div class="ans-qnum">Correct answer</div>
+            <div class="ans-answer ans-correct-text">${correctAnswer}</div>
+            <div class="ans-expl">${q.explanation}</div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

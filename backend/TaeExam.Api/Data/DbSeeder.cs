@@ -13,6 +13,73 @@ public static class DbSeeder
 
     public static void Seed(AppDbContext db, string seedDataPath)
     {
+        // Roles and ExamCategory each get their own independent guard, not the Questions guard below —
+        // otherwise a future partially-seeded database (Questions already populated) would silently
+        // never seed Roles/Categories.
+        if (!db.Roles.Any())
+        {
+            db.Roles.AddRange(
+                new Role { Name = RoleNames.Administrator },
+                new Role { Name = RoleNames.Teacher },
+                new Role { Name = RoleNames.Student });
+            db.SaveChanges();
+        }
+
+        if (!db.ExamCategories.Any())
+        {
+            db.ExamCategories.Add(new ExamCategory { Name = "TAE" });
+            db.SaveChanges();
+        }
+
+        if (!db.RolePermissions.Any())
+        {
+            var allRoles = new[] { RoleNames.Administrator, RoleNames.Teacher, RoleNames.Student };
+            var adminAndTeacher = new[] { RoleNames.Administrator, RoleNames.Teacher };
+            var adminOnly = new[] { RoleNames.Administrator };
+
+            var defaults = new Dictionary<string, string[]>
+            {
+                ["exam:start"] = allRoles,
+                ["exam:submit"] = allRoles,
+                ["exam:review"] = allRoles,
+                ["paper:create"] = allRoles,
+                ["analysis:view"] = allRoles,
+                ["wrongquestion:view"] = allRoles,
+                ["announcement:view"] = allRoles,
+                ["exam:import"] = adminAndTeacher,
+                ["announcement:manage"] = adminOnly,
+                ["user:view"] = adminOnly,
+                ["user:manage"] = adminOnly,
+                ["audit:view"] = adminOnly,
+                ["permission:manage"] = adminOnly,
+            };
+
+            foreach (var (key, roles) in defaults)
+            {
+                foreach (var role in roles)
+                {
+                    db.RolePermissions.Add(new RolePermission { PermissionKey = key, RoleName = role });
+                }
+            }
+            db.SaveChanges();
+        }
+
+        // Bootstrap: a fresh database has no way to reach Administrator-only endpoints (user
+        // management, audit log, announcements) without one seeded admin account to start from.
+        if (!db.Users.Any(u => u.RoleId == db.Roles.First(r => r.Name == RoleNames.Administrator).Id))
+        {
+            var adminRoleId = db.Roles.First(r => r.Name == RoleNames.Administrator).Id;
+            db.Users.Add(new User
+            {
+                Username = "admin",
+                Email = "admin@example.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@12345", workFactor: 11),
+                RoleId = adminRoleId,
+                Status = UserStatus.Active,
+            });
+            db.SaveChanges();
+        }
+
         if (db.Questions.Any())
         {
             return; // already seeded
@@ -59,6 +126,7 @@ public static class DbSeeder
             legacyIdToQuestionId[(q.SourceFile, q.LegacyId)] = entity.Id;
         }
 
+        var taeCategoryId = db.ExamCategories.First(c => c.Name == "TAE").Id;
         var importedExams = ReadJson<List<SeedImportedExam>>(Path.Combine(seedDataPath, "imported_exams.json"));
         foreach (var ex in importedExams)
         {
@@ -69,6 +137,9 @@ public static class DbSeeder
                 SourceFile = ex.SourceFile,
                 TotalPoints = ex.TotalPoints,
                 PassThresholdPoints = ex.PassThresholdPoints,
+                TimeLimitMinutes = (int)Math.Round(ex.QuestionLegacyIdsInOrder.Count * 2.25), // matches the ~90min/40q ratio of the original mock exams
+                CategoryId = taeCategoryId,
+                UserId = null, // shared/global — visible to every user
             };
             db.Exams.Add(exam);
             db.SaveChanges();

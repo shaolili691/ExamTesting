@@ -64,6 +64,10 @@ public static class ScoringService
             attempt.Answers.Select(a => (a.ExamQuestion!.Question!, a)),
             chapterTitles);
 
+        var elapsedSeconds = attempt.SubmittedAtUtc.HasValue
+            ? (int)(attempt.SubmittedAtUtc.Value - attempt.StartedAtUtc).TotalSeconds
+            : (int?)null;
+
         return new AttemptResultDto(
             attempt.Id,
             attempt.ExamId,
@@ -72,7 +76,9 @@ public static class ScoringService
             attempt.MaxScore,
             attempt.PercentScore,
             attempt.Passed,
+            attempt.StartedAtUtc,
             attempt.SubmittedAtUtc,
+            elapsedSeconds,
             questionDtos,
             chapterBreakdown);
     }

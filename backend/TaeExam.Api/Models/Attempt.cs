@@ -10,6 +10,7 @@ public class Attempt
 {
     public int Id { get; set; }
     public int ExamId { get; set; }
+    public int UserId { get; set; }
     public DateTime StartedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? SubmittedAtUtc { get; set; }
     public int Score { get; set; }

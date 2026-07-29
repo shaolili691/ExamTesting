@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audit Log — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
+<div class="container">
+  <div class="page-header"><h1>Audit log</h1></div>
+  <div id="content" class="loading">Loading…</div>
+  <div id="pager" style="margin-top:14px;display:flex;gap:10px;justify-content:center"></div>
+</div>
+</div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
+let page = 1;
+const pageSize = 50;
+
+async function load() {
+  const el = document.getElementById('content');
+  try {
+    const result = await Api.listAuditLogs({ page, pageSize });
+    el.className = '';
+    el.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>When</th><th>User</th><th>Action</th><th>Entity</th><th>Description</th><th>IP</th></tr></thead>
+        <tbody>
+          ${result.items.map(a => `
+            <tr>
+              <td>${new Date(a.createdAtUtc).toLocaleString()}</td>
+              <td>${a.username || '(anonymous)'}</td>
+              <td>${a.action}</td>
+              <td>${a.entity || ''}${a.entityId ? ' #' + a.entityId : ''}</td>
+              <td>${a.description || ''}</td>
+              <td>${a.ip || ''}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+    const totalPages = Math.max(1, Math.ceil(result.total / pageSize));
+    document.getElementById('pager').innerHTML = `
+      <button class="btn small secondary" ${page <= 1 ? 'disabled' : ''} onclick="changePage(-1)">Previous</button>
+      <span class="meta" style="align-self:center">Page ${page} / ${totalPages}</span>
+      <button class="btn small secondary" ${page >= totalPages ? 'disabled' : ''} onclick="changePage(1)">Next</button>
+    `;
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+function changePage(delta) {
+  page += delta;
+  load();
+}
+
+load();
+</script>
+</body>
+</html>

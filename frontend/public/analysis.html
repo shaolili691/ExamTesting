@@ -7,20 +7,38 @@
 <link rel="stylesheet" href="css/shared.css">
 </head>
 <body>
-<div class="top-nav">
-  <span class="brand">TAE Exam System</span>
-  <a href="index.html">Dashboard</a>
-  <a href="history.html">History</a>
-  <a href="analysis.html" class="active">Analysis</a>
-  <a href="generate.html">Generate</a>
-</div>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
 <div class="container">
-  <div class="page-header"><h1>Analysis</h1></div>
+  <div class="page-header">
+    <h1>Analysis</h1>
+    <a id="scopeToggle" data-admin-only style="display:none" class="btn small secondary" href="#">Viewing: my data</a>
+  </div>
   <div id="content" class="loading">Loading…</div>
 </div>
+</div>
+</div>
 
+<script src="js/auth.js"></script>
 <script src="js/api.js"></script>
+<script src="js/nav.js"></script>
 <script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
+const params = new URLSearchParams(location.search);
+const scopeAll = params.get('scope') === 'all';
+
+const toggle = document.getElementById('scopeToggle');
+toggle.textContent = scopeAll ? 'Viewing: all users — switch to mine' : 'Viewing: my data — switch to all users';
+toggle.addEventListener('click', (e) => {
+  e.preventDefault();
+  location.href = scopeAll ? 'analysis.html' : 'analysis.html?scope=all';
+});
+
 function bar(label, pct, sub) {
   const safePct = Math.max(0, Math.min(100, pct));
   return `
@@ -31,10 +49,16 @@ function bar(label, pct, sub) {
     </div>${sub ? `<div style="margin:-4px 0 8px 200px;font-size:11px;color:var(--text-muted)">${sub}</div>` : ''}`;
 }
 
+function formatMinutes(mins) {
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 async function load() {
   const el = document.getElementById('content');
   try {
-    const o = await Api.getAnalysisOverview();
+    const o = await Api.getAnalysisOverview(scopeAll ? { scope: 'all' } : undefined);
     if (o.overall.totalAttempts === 0) {
       el.className = 'empty-state';
       el.textContent = 'No submitted attempts yet — take an exam first to see analysis.';
@@ -52,6 +76,8 @@ async function load() {
         <div class="metric"><div class="metric-label">Total attempts</div><div class="metric-value">${o.overall.totalAttempts}</div></div>
         <div class="metric"><div class="metric-label">Average score</div><div class="metric-value">${o.overall.avgPercent}%</div></div>
         <div class="metric"><div class="metric-label">Pass rate</div><div class="metric-value">${o.overall.passRate}%</div></div>
+        <div class="metric"><div class="metric-label">Study time</div><div class="metric-value">${formatMinutes(o.overall.studyTimeMinutes)}</div></div>
+        <div class="metric"><div class="metric-label">Completed exams</div><div class="metric-value">${o.overall.completedExams}</div></div>
         <div class="metric"><div class="metric-label">Weakest chapters</div><div class="metric-value" style="font-size:14px">${o.weakestChapters.join(', ')}</div></div>
       </div>
 

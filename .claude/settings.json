@@ -6,7 +6,10 @@
       "Bash(curl -s http://localhost:5017/api/attempts/1)",
       "Bash(node -e ' *)",
       "Bash(curl -s -X POST http://localhost:5017/api/exams/generate -H \"Content-Type: application/json\" -d '{\"questionCount\":40,\"boostWeakChapters\":false}')",
-      "Bash(curl -s -X POST http://localhost:5017/api/exams/generate -H \"Content-Type: application/json\" -d '{\"questionCount\":40,\"boostWeakChapters\":true,\"boostFactor\":1.5}')"
+      "Bash(curl -s -X POST http://localhost:5017/api/exams/generate -H \"Content-Type: application/json\" -d '{\"questionCount\":40,\"boostWeakChapters\":true,\"boostFactor\":1.5}')",
+      "Bash(find \"/e/Project/TestTools/TestToolsApi\" -type f \\\\\\( -iname \"*.cs\" \\\\\\) | grep -iE \"auth|user|role|permission|audit|jwt|login\" | sort)",
+      "Read(//e/Project/TestTools/TestToolsApi/**)",
+      "Read(//e/Project/TestTools/TestToolsApi/Controllers/**)"
     ]
   }
 }

@@ -5,6 +5,7 @@ public enum ExamType
     Imported,
     Generated,
     Drill,
+    Manual,
 }
 
 public class Exam
@@ -15,6 +16,8 @@ public class Exam
     public string? SourceFile { get; set; } // Imported only
     public int? GeneratedFromAttemptId { get; set; } // Drill only
     public string? BlueprintJson { get; set; } // Generated only: per-chapter target counts/weights used, for audit
+    public int? CategoryId { get; set; }
+    public int? UserId { get; set; } // null = shared/global (Imported); set = private to that user (Generated/Drill)
     public int TotalPoints { get; set; }
     public int PassThresholdPoints { get; set; }
     public int? TimeLimitMinutes { get; set; }

@@ -11,7 +11,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5017';
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/api', express.raw({ type: '*/*', limit: '5mb' }));
+app.use('/api', express.raw({ type: '*/*', limit: '20mb' }));
 
 app.use('/api', async (req, res) => {
   const targetUrl = BACKEND_URL + '/api' + req.url;
@@ -20,7 +20,12 @@ app.use('/api', async (req, res) => {
   try {
     const response = await fetch(targetUrl, {
       method: req.method,
-      headers: hasBody ? { 'Content-Type': req.headers['content-type'] || 'application/json' } : {},
+      headers: {
+        ...(hasBody ? { 'Content-Type': req.headers['content-type'] || 'application/json' } : {}),
+        ...(req.headers['authorization'] ? { 'Authorization': req.headers['authorization'] } : {}),
+        'X-Forwarded-For': req.ip,
+        'User-Agent': req.headers['user-agent'] || '',
+      },
       body: hasBody ? req.body : undefined,
     });
     const text = await response.text();

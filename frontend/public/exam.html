@@ -7,13 +7,10 @@
 <link rel="stylesheet" href="css/shared.css">
 </head>
 <body>
-<div class="top-nav">
-  <span class="brand">TAE Exam System</span>
-  <a href="index.html">Dashboard</a>
-  <a href="history.html">History</a>
-  <a href="analysis.html">Analysis</a>
-  <a href="generate.html">Generate</a>
-</div>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
 <div class="container">
   <h1 id="examTitle" style="font-size:18px;font-weight:600;margin:12px 0 18px">Loading…</h1>
 
@@ -26,10 +23,20 @@
   <div id="exam" class="tab-panel show">
     <div class="exam-header">
       <div class="stat-row" id="statRow"></div>
-      <button class="btn" id="submitBtn" onclick="submitExam()">Submit and score</button>
+      <div id="timerBox" class="stat" style="display:none">Time left: <span class="timer-display" id="timerDisplay">--:--</span></div>
     </div>
-    <div class="filter-row" id="filterRow"></div>
-    <div id="qlist"></div>
+    <div class="exam-layout">
+      <div class="exam-sidebar" id="sidebar"></div>
+      <div class="exam-main">
+        <div id="qcontainer"></div>
+        <div class="exam-nav-buttons">
+          <button class="btn secondary" id="prevBtn" onclick="goPrev()">Previous</button>
+          <button class="btn secondary" id="markBtn" onclick="toggleMark()">Mark for review</button>
+          <button class="btn" id="nextBtn" onclick="goNext()">Next</button>
+          <button class="btn" id="submitBtn" onclick="openSubmitConfirm()" style="display:none">Submit and score</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="answers" class="tab-panel">
@@ -41,16 +48,42 @@
   </div>
 </div>
 
+<div id="confirmModal" class="modal-backdrop" style="display:none">
+  <div class="modal">
+    <h3>Submit this exam?</h3>
+    <div class="modal-stats">
+      <div class="modal-stat"><div class="modal-stat-value" id="confirmAnswered">0</div><div class="modal-stat-label">Answered</div></div>
+      <div class="modal-stat"><div class="modal-stat-value" id="confirmUnanswered">0</div><div class="modal-stat-label">Unanswered</div></div>
+      <div class="modal-stat"><div class="modal-stat-value" id="confirmMarked">0</div><div class="modal-stat-label">Marked</div></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeSubmitConfirm()">Continue review</button>
+      <button class="btn" onclick="doSubmit()">Submit</button>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<script src="js/auth.js"></script>
 <script src="js/api.js"></script>
+<script src="js/nav.js"></script>
 <script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
 const params = new URLSearchParams(location.search);
 const examId = Number(params.get('examId'));
 
 let paper = null;
 let attemptId = null;
 let submitted = false;
+let currentIndex = 0;
 const userAnswers = {}; // examQuestionId -> number[]
-let activeChapterFilter = 'All';
+const markedSet = new Set(); // examQuestionId
+let timerInterval = null;
+let deadline = null; // epoch ms
 
 function showTab(name) {
   if ((name === 'answers' || name === 'review') && !submitted) return;
@@ -65,47 +98,60 @@ function chapterBadge(chapter) { return `<span class="badge b-ch">${chapter}</sp
 function levelBadge(level) { return level ? `<span class="badge b-k${level.slice(1)}">${level}</span>` : ''; }
 function scenarioBadge(isScenario) { return isScenario ? `<span class="badge b-scen">Scenario</span>` : ''; }
 
-function buildFilterRow() {
-  const chapters = [...new Set(paper.questions.map(q => q.chapter))].sort();
-  const row = document.getElementById('filterRow');
-  row.innerHTML = ['All', ...chapters].map(ch =>
-    `<button class="filter-btn ${ch === activeChapterFilter ? 'sel' : ''}" onclick="setFilter('${ch}')">${ch}</button>`
-  ).join('');
-}
-
-function setFilter(chapter) {
-  activeChapterFilter = chapter;
-  buildFilterRow();
-  renderQuestions();
-}
-
-function renderQuestions() {
-  const list = document.getElementById('qlist');
-  const questions = paper.questions.filter(q => activeChapterFilter === 'All' || q.chapter === activeChapterFilter);
-  list.innerHTML = questions.map((q, i) => {
-    const selected = userAnswers[q.examQuestionId] || [];
-    const inputType = q.isMultiChoice ? 'checkbox' : 'radio';
-    const opts = q.options.map((opt, oi) => `
-      <label class="opt">
-        <input type="${inputType}" name="q-${q.examQuestionId}" value="${oi}"
-          ${selected.includes(oi) ? 'checked' : ''} ${submitted ? 'disabled' : ''}
-          onchange="recordAnswer(${q.examQuestionId}, ${oi}, ${q.isMultiChoice})">
-        <span>${opt}</span>
-      </label>`).join('');
-    return `
-      <div class="q-block ${q.isScenario ? 'app-q' : ''}">
-        <div class="q-meta">
-          ${chapterBadge(q.chapter)} ${levelBadge(q.level)} ${scenarioBadge(q.isScenario)}
-          <span class="meta" style="font-size:11px;color:var(--text-muted)">Q${q.orderIndex + 1} · ${q.points} pt${q.points > 1 ? 's' : ''}</span>
-        </div>
-        ${q.scenarioText ? `<div class="q-scenario">${q.scenarioText}</div>` : ''}
-        <div class="q-text">${q.questionText}</div>
-        <div class="q-opts">${opts}</div>
-        ${q.isMultiChoice ? '<div class="sel-note">Select all that apply.</div>' : ''}
-      </div>`;
+function renderSidebar() {
+  const el = document.getElementById('sidebar');
+  el.innerHTML = paper.questions.map((q, i) => {
+    const classes = ['qnav-btn'];
+    if ((userAnswers[q.examQuestionId] || []).length > 0) classes.push('answered');
+    if (markedSet.has(q.examQuestionId)) classes.push('marked');
+    if (i === currentIndex) classes.push('current');
+    return `<button class="${classes.join(' ')}" ${submitted ? 'disabled' : ''} onclick="jumpTo(${i})">${i + 1}</button>`;
   }).join('');
 }
 
+function jumpTo(i) {
+  currentIndex = i;
+  renderCurrentQuestion();
+  renderSidebar();
+}
+
+function goPrev() { if (currentIndex > 0) jumpTo(currentIndex - 1); }
+function goNext() { if (currentIndex < paper.questions.length - 1) jumpTo(currentIndex + 1); }
+
+function renderCurrentQuestion() {
+  const q = paper.questions[currentIndex];
+  const selected = userAnswers[q.examQuestionId] || [];
+  const inputType = q.isMultiChoice ? 'checkbox' : 'radio';
+  const opts = q.options.map((opt, oi) => `
+    <label class="opt">
+      <input type="${inputType}" name="q-${q.examQuestionId}" value="${oi}"
+        ${selected.includes(oi) ? 'checked' : ''} ${submitted ? 'disabled' : ''}
+        onchange="recordAnswer(${q.examQuestionId}, ${oi}, ${q.isMultiChoice})">
+      <span>${opt}</span>
+    </label>`).join('');
+
+  document.getElementById('qcontainer').innerHTML = `
+    <div class="q-block ${q.isScenario ? 'app-q' : ''}">
+      <div class="q-meta">
+        ${chapterBadge(q.chapter)} ${levelBadge(q.level)} ${scenarioBadge(q.isScenario)}
+        <span class="meta" style="font-size:11px;color:var(--text-muted)">Q${currentIndex + 1} of ${paper.questions.length} · ${q.points} pt${q.points > 1 ? 's' : ''}</span>
+      </div>
+      ${q.scenarioText ? `<div class="q-scenario">${q.scenarioText}</div>` : ''}
+      <div class="q-text">${q.questionText}</div>
+      <div class="q-opts">${opts}</div>
+      ${q.isMultiChoice ? '<div class="sel-note">Select all that apply.</div>' : ''}
+      <div class="save-status" id="saveStatus"></div>
+    </div>`;
+
+  document.getElementById('prevBtn').disabled = currentIndex === 0;
+  const isLast = currentIndex === paper.questions.length - 1;
+  document.getElementById('nextBtn').style.display = isLast ? 'none' : '';
+  document.getElementById('submitBtn').style.display = isLast && !submitted ? '' : 'none';
+  document.getElementById('markBtn').textContent = markedSet.has(q.examQuestionId) ? 'Unmark' : 'Mark for review';
+  document.getElementById('markBtn').disabled = submitted;
+}
+
+let saveTimer = null;
 function recordAnswer(examQuestionId, optionIndex, isMulti) {
   if (!userAnswers[examQuestionId]) userAnswers[examQuestionId] = [];
   if (isMulti) {
@@ -115,13 +161,33 @@ function recordAnswer(examQuestionId, optionIndex, isMulti) {
   } else {
     userAnswers[examQuestionId] = [optionIndex];
   }
-  updateAnsweredCount();
+  renderSidebar();
+  saveCurrentAnswer(examQuestionId);
 }
 
-function updateAnsweredCount() {
-  const answered = Object.values(userAnswers).filter(a => a.length > 0).length;
-  const el = document.getElementById('answeredCount');
-  if (el) el.textContent = answered;
+function toggleMark() {
+  const q = paper.questions[currentIndex];
+  if (markedSet.has(q.examQuestionId)) markedSet.delete(q.examQuestionId);
+  else markedSet.add(q.examQuestionId);
+  renderSidebar();
+  renderCurrentQuestion();
+  saveCurrentAnswer(q.examQuestionId);
+}
+
+function saveCurrentAnswer(examQuestionId) {
+  const statusEl = document.getElementById('saveStatus');
+  if (statusEl) statusEl.textContent = 'Saving…';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      await Api.saveAnswer(attemptId, examQuestionId, userAnswers[examQuestionId] || [], markedSet.has(examQuestionId));
+      const el = document.getElementById('saveStatus');
+      if (el) el.textContent = 'Saved';
+    } catch (err) {
+      const el = document.getElementById('saveStatus');
+      if (el) el.textContent = 'Save failed: ' + err.message;
+    }
+  }, 250);
 }
 
 function renderStatRow() {
@@ -129,26 +195,66 @@ function renderStatRow() {
     <div class="stat">Questions: <span>${paper.questions.length}</span></div>
     <div class="stat">Total: <span>${paper.totalPoints}</span> pts</div>
     <div class="stat">Pass: <span>${paper.passThresholdPoints} pts</span></div>
-    <div class="stat">Answered: <span id="answeredCount">0</span>/${paper.questions.length}</div>
   `;
 }
 
-async function submitExam() {
+function startCountdown(totalSeconds) {
+  const box = document.getElementById('timerBox');
+  box.style.display = '';
+  deadline = Date.now() + totalSeconds * 1000;
+  updateTimer();
+  timerInterval = setInterval(updateTimer, 1000);
+}
+
+function updateTimer() {
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) {
+    clearInterval(timerInterval);
+    document.getElementById('timerDisplay').textContent = '00:00:00';
+    autoSubmit();
+    return;
+  }
+  const totalSec = Math.floor(remainingMs / 1000);
+  const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+  const s = String(totalSec % 60).padStart(2, '0');
+  document.getElementById('timerDisplay').textContent = `${h}:${m}:${s}`;
+}
+
+async function autoSubmit() {
+  if (submitted) return;
+  await doSubmit();
+}
+
+function openSubmitConfirm() {
+  const total = paper.questions.length;
+  const answered = paper.questions.filter(q => (userAnswers[q.examQuestionId] || []).length > 0).length;
+  document.getElementById('confirmAnswered').textContent = answered;
+  document.getElementById('confirmUnanswered').textContent = total - answered;
+  document.getElementById('confirmMarked').textContent = markedSet.size;
+  document.getElementById('confirmModal').style.display = 'flex';
+}
+
+function closeSubmitConfirm() {
+  document.getElementById('confirmModal').style.display = 'none';
+}
+
+async function doSubmit() {
+  closeSubmitConfirm();
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.textContent = 'Scoring…';
   try {
-    const answers = Object.entries(userAnswers).map(([examQuestionId, selectedIndexes]) => ({
-      examQuestionId: Number(examQuestionId),
-      selectedIndexes,
-    }));
-    const result = await Api.submitAttempt(attemptId, answers);
+    clearInterval(timerInterval);
+    const result = await Api.submitAttempt(attemptId);
     submitted = true;
     document.getElementById('answersTab').style.display = '';
     document.getElementById('reviewTab').style.display = '';
+    document.getElementById('timerBox').style.display = 'none';
     renderAnswerKey(result);
     renderResults(result);
-    renderQuestions();
+    renderCurrentQuestion();
+    renderSidebar();
     showTab('review');
   } catch (err) {
     alert('Could not submit: ' + err.message);
@@ -172,8 +278,16 @@ function renderAnswerKey(result) {
     </table>`;
 }
 
+function formatDuration(totalSeconds) {
+  if (totalSeconds == null) return null;
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.round((totalSeconds % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 function renderResults(result) {
   const pct = result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0;
+  const duration = formatDuration(result.elapsedSeconds);
   const chCards = result.chapterBreakdown.map(c => `
     <div class="ch-card">
       <div class="ch-card-title">${c.chapter} — ${c.chapterTitle}</div>
@@ -195,7 +309,7 @@ function renderResults(result) {
   document.getElementById('reviewContent').innerHTML = `
     <div class="result-header">
       <div class="result-score">${result.score} / ${result.maxScore} pts</div>
-      <div class="result-pct">${pct}%</div>
+      <div class="result-pct">${pct}%${duration ? ' · Time: ' + duration : ''}</div>
       <div class="result-msg ${result.passed ? 'pass-msg' : 'fail-msg'}">${result.passed ? 'Pass' : 'Not yet — keep practicing'}</div>
     </div>
     <div class="ch-summary">${chCards}</div>
@@ -211,13 +325,31 @@ async function init() {
     paper = await Api.getExam(examId);
     document.getElementById('examTitle').textContent = paper.title;
     renderStatRow();
-    buildFilterRow();
-    renderQuestions();
+
     const started = await Api.startAttempt(examId);
     attemptId = started.attemptId;
+
+    if (started.resumed) {
+      const state = await Api.getAttemptState(attemptId);
+      for (const a of state.answers) {
+        userAnswers[a.examQuestionId] = a.selectedIndexes;
+        if (a.marked) markedSet.add(a.examQuestionId);
+      }
+      if (state.timeLimitMinutes) {
+        const elapsedSec = (Date.now() - new Date(state.startedAtUtc).getTime()) / 1000;
+        const remainingSec = state.timeLimitMinutes * 60 - elapsedSec;
+        if (remainingSec <= 0) { await doSubmit(); return; }
+        startCountdown(remainingSec);
+      }
+    } else if (paper.timeLimitMinutes) {
+      startCountdown(paper.timeLimitMinutes * 60);
+    }
+
+    renderSidebar();
+    renderCurrentQuestion();
   } catch (err) {
     document.getElementById('examTitle').textContent = 'Could not load exam';
-    document.getElementById('qlist').innerHTML = `<p class="empty-state">${err.message}</p>`;
+    document.getElementById('qcontainer').innerHTML = `<p class="empty-state">${err.message}</p>`;
   }
 }
 

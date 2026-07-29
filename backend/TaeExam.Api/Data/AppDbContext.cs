@@ -13,6 +13,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ExamQuestion> ExamQuestions => Set<ExamQuestion>();
     public DbSet<Attempt> Attempts => Set<Attempt>();
     public DbSet<AttemptAnswer> AttemptAnswers => Set<AttemptAnswer>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Announcement> Announcements => Set<Announcement>();
+    public DbSet<ExamCategory> ExamCategories => Set<ExamCategory>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,6 +58,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Exam>(e =>
         {
             e.Property(x => x.Type).HasConversion<string>();
+            e.HasOne<ExamCategory>().WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ExamQuestion>(e =>
@@ -63,6 +72,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.Property(a => a.Status).HasConversion<string>();
             e.HasOne(a => a.Exam).WithMany().HasForeignKey(a => a.ExamId);
+            e.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<AttemptAnswer>(e =>
@@ -75,6 +85,44 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => JsonSerializer.Deserialize<List<int>>(v, (JsonSerializerOptions?)null) ?? new())
                 .Metadata.SetValueComparer(intListComparer);
+        });
+
+        modelBuilder.Entity<Role>(e =>
+        {
+            e.HasIndex(r => r.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<User>(e =>
+        {
+            e.HasIndex(u => u.Username).IsUnique();
+            e.Property(u => u.Status).HasConversion<string>();
+            e.HasOne(u => u.Role).WithMany().HasForeignKey(u => u.RoleId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RefreshToken>(e =>
+        {
+            e.HasIndex(r => r.TokenHash).IsUnique();
+            e.HasOne(r => r.User).WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AuditLog>(e =>
+        {
+            e.HasOne(a => a.User).WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Announcement>(e =>
+        {
+            e.HasOne(a => a.CreatedByUser).WithMany().HasForeignKey(a => a.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ExamCategory>(e =>
+        {
+            e.HasIndex(c => c.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<RolePermission>(e =>
+        {
+            e.HasIndex(rp => new { rp.PermissionKey, rp.RoleName }).IsUnique();
         });
     }
 }

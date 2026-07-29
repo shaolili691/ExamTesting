@@ -9,7 +9,7 @@ public class DrillGenerationService(AppDbContext db)
 {
     private const decimal DefaultPassFraction = 0.65m;
 
-    public async Task<(Exam Exam, List<ChapterAccuracyDto> WeakAreaSummary, int CoreCount, int FillCount, List<string> Warnings)> GenerateAsync(int attemptId, DrillRequest req)
+    public async Task<(Exam Exam, List<ChapterAccuracyDto> WeakAreaSummary, int CoreCount, int FillCount, List<string> Warnings)> GenerateAsync(int attemptId, DrillRequest req, int callerUserId, bool isAdmin)
     {
         var warnings = new List<string>();
 
@@ -18,6 +18,11 @@ public class DrillGenerationService(AppDbContext db)
             .Include(a => a.Answers).ThenInclude(ans => ans.ExamQuestion!).ThenInclude(eq => eq.Question)
             .FirstOrDefaultAsync(a => a.Id == attemptId)
             ?? throw new InvalidOperationException("Attempt not found");
+
+        if (attempt.UserId != callerUserId && !isAdmin)
+        {
+            throw new UnauthorizedAccessException("You do not own this attempt");
+        }
 
         if (attempt.Status != AttemptStatus.Submitted)
         {
@@ -79,6 +84,8 @@ public class DrillGenerationService(AppDbContext db)
         var totalPoints = allPicks.Sum(q => q.Points);
         var passThreshold = (int)Math.Ceiling(totalPoints * DefaultPassFraction);
 
+        var timeLimitMinutes = (int)Math.Round(allPicks.Count * 2.25); // same min/question ratio as generated papers
+
         var exam = new Exam
         {
             Title = $"Targeted drill from attempt #{attemptId}",
@@ -86,6 +93,9 @@ public class DrillGenerationService(AppDbContext db)
             GeneratedFromAttemptId = attemptId,
             TotalPoints = totalPoints,
             PassThresholdPoints = passThreshold,
+            TimeLimitMinutes = timeLimitMinutes,
+            CategoryId = 1,
+            UserId = callerUserId,
         };
         db.Exams.Add(exam);
         await db.SaveChangesAsync();

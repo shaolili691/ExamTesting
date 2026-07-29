@@ -7,20 +7,25 @@
 <link rel="stylesheet" href="css/shared.css">
 </head>
 <body>
-<div class="top-nav">
-  <span class="brand">TAE Exam System</span>
-  <a href="index.html">Dashboard</a>
-  <a href="history.html" class="active">History</a>
-  <a href="analysis.html">Analysis</a>
-  <a href="generate.html">Generate</a>
-</div>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
 <div class="container">
   <div class="page-header"><h1>Attempt history</h1></div>
   <div id="content" class="loading">Loading…</div>
 </div>
+</div>
+</div>
 
+<script src="js/auth.js"></script>
 <script src="js/api.js"></script>
+<script src="js/nav.js"></script>
 <script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
 function statusBadge(a) {
   if (a.status !== 'Submitted') return '<span class="badge b-k3">In progress</span>';
   return a.passed ? '<span class="badge b-pass">Pass</span>' : '<span class="badge b-fail">Fail</span>';

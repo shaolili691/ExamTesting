@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign In — Practical Exam</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="login-shell">
+  <div class="login-decor login-decor-a"></div>
+  <div class="login-decor login-decor-b"></div>
+  <div class="login-decor login-decor-c"></div>
+
+  <div class="login-center">
+    <div class="login-logo">
+      <svg class="login-logo-mark" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="login-logo-text">Practical<strong>Exam</strong></span>
+    </div>
+
+    <div class="login-card">
+      <div class="login-card-header">Sign In</div>
+      <div class="login-card-body">
+        <div id="errorBox"></div>
+        <div class="form-row">
+          <label for="username">User name</label>
+          <div class="field-icon-wrap">
+            <input type="text" id="username" autocomplete="username">
+            <span class="field-icon">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.6"/><path d="M4.5 19.5c1.4-3.4 4.3-5.2 7.5-5.2s6.1 1.8 7.5 5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </span>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="password">Password</label>
+          <div class="field-icon-wrap">
+            <input type="password" id="password" autocomplete="current-password">
+            <button type="button" class="field-icon field-icon-btn" id="togglePassword" aria-label="Show password">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.8" stroke="currentColor" stroke-width="1.6"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="login-card-footer">
+        <button class="btn" id="loginBtn" onclick="doLogin()">Sign In</button>
+      </div>
+    </div>
+
+    <div class="auth-links">No account? <a href="register.html">Register</a></div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script>
+document.getElementById('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('username').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+
+document.getElementById('togglePassword').addEventListener('click', () => {
+  const input = document.getElementById('password');
+  const btn = document.getElementById('togglePassword');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+});
+
+async function doLogin() {
+  const btn = document.getElementById('loginBtn');
+  const errorBox = document.getElementById('errorBox');
+  errorBox.innerHTML = '';
+  btn.disabled = true;
+  try {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const result = await Api.login(username, password);
+    Auth.setSession({ accessToken: result.accessToken, refreshToken: result.refreshToken, user: result.user });
+    const params = new URLSearchParams(location.search);
+    location.href = params.get('redirect') || 'index.html';
+  } catch (err) {
+    errorBox.innerHTML = `<div class="auth-error">${err.message}</div>`;
+    btn.disabled = false;
+  }
+}
+
+if (Auth.getAccessToken()) location.href = 'index.html';
+</script>
+</body>
+</html>

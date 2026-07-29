@@ -3,18 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TAE Exam System</title>
+<title>Practical Exam</title>
 <link rel="stylesheet" href="css/shared.css">
 </head>
 <body>
-<div class="top-nav">
-  <span class="brand">TAE Exam System</span>
-  <a href="index.html" class="active">Dashboard</a>
-  <a href="history.html">History</a>
-  <a href="analysis.html">Analysis</a>
-  <a href="generate.html">Generate</a>
-</div>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
 <div class="container">
+  <div id="announcementBanner"></div>
+
   <div class="page-header">
     <h1>Exams</h1>
     <a class="btn" href="generate.html">Generate new exam</a>
@@ -24,9 +23,29 @@
 
   <div id="examList" class="loading">Loading exams…</div>
 </div>
+</div>
+</div>
 
+<script src="js/auth.js"></script>
 <script src="js/api.js"></script>
+<script src="js/nav.js"></script>
 <script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
+async function loadAnnouncements() {
+  const el = document.getElementById('announcementBanner');
+  try {
+    const items = await Api.listAnnouncements();
+    if (items.length === 0) return;
+    el.innerHTML = items.map(a => `
+      <div class="weak-banner">
+        <strong>${a.title}</strong> — ${a.content}
+      </div>`).join('');
+  } catch (err) { /* non-critical, ignore */ }
+}
+
 async function loadQuickStats() {
   const el = document.getElementById('quickStats');
   try {
@@ -48,10 +67,14 @@ function typeBadgeClass(type) {
   return 'b-ch';
 }
 
+function selectedCategoryId() {
+  return new URLSearchParams(location.search).get('categoryId') || localStorage.getItem('tae_category') || undefined;
+}
+
 async function loadExams() {
   const el = document.getElementById('examList');
   try {
-    const exams = await Api.listExams();
+    const exams = await Api.listExams(selectedCategoryId());
     if (exams.length === 0) {
       el.className = 'empty-state';
       el.textContent = 'No exams yet.';
@@ -76,6 +99,7 @@ async function loadExams() {
   }
 }
 
+loadAnnouncements();
 loadQuickStats();
 loadExams();
 </script>

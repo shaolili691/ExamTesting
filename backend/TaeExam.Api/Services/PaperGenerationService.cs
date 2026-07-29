@@ -9,7 +9,7 @@ public class PaperGenerationService(AppDbContext db, AnalysisService analysis)
 {
     private const decimal DefaultPassFraction = 0.65m; // matches the most rigorous imported exam's bar
 
-    public async Task<(Exam Exam, List<ChapterBlueprintDto> Blueprint, List<string> Warnings)> GenerateAsync(GenerateExamRequest req)
+    public async Task<(Exam Exam, List<ChapterBlueprintDto> Blueprint, List<string> Warnings)> GenerateAsync(GenerateExamRequest req, int callerUserId)
     {
         var warnings = new List<string>();
 
@@ -29,7 +29,7 @@ public class PaperGenerationService(AppDbContext db, AnalysisService analysis)
         var weightedFractions = new Dictionary<string, decimal>(baseFractions);
         if (req.BoostWeakChapters)
         {
-            var accuracyByChapter = await analysis.GetChapterAccuracyMapAsync();
+            var accuracyByChapter = await analysis.GetChapterAccuracyMapAsync(callerUserId);
             if (accuracyByChapter.Count > 0)
             {
                 var overallAvgAccuracy = accuracyByChapter.Values.Average();
@@ -95,8 +95,10 @@ public class PaperGenerationService(AppDbContext db, AnalysisService analysis)
             }
         }
 
-        // 4. Selection with repeat-avoidance.
+        // 4. Selection with repeat-avoidance (scoped to this user's own recent exams only,
+        // so one user's history never leaks into another's blueprint).
         var recentExamIds = await db.Exams
+            .Where(e => e.UserId == callerUserId)
             .OrderByDescending(e => e.CreatedAtUtc)
             .Take(req.AvoidRecentExamsCount)
             .Select(e => e.Id)
@@ -140,6 +142,9 @@ public class PaperGenerationService(AppDbContext db, AnalysisService analysis)
             .OrderBy(b => b.Chapter)
             .ToList();
 
+        var tenMinChapterRatio = 2.25; // minutes/question, matching the original mock exams' 90min/40q ratio
+        var timeLimitMinutes = (int)Math.Round(selected.Count * tenMinChapterRatio);
+
         var exam = new Exam
         {
             Title = req.Title ?? $"Generated exam — {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC",
@@ -147,6 +152,9 @@ public class PaperGenerationService(AppDbContext db, AnalysisService analysis)
             BlueprintJson = System.Text.Json.JsonSerializer.Serialize(blueprintUsed),
             TotalPoints = totalPoints,
             PassThresholdPoints = passThreshold,
+            TimeLimitMinutes = timeLimitMinutes,
+            CategoryId = 1, // TAE — the only category that exists today
+            UserId = callerUserId,
         };
         db.Exams.Add(exam);
         await db.SaveChangesAsync();

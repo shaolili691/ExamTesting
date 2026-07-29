@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Users — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
+<div class="container">
+  <div class="page-header"><h1>Users</h1></div>
+
+  <div class="card" style="max-width:520px">
+    <h3>Create user</h3>
+    <div class="form-row"><label for="newUsername">Username</label><input type="text" id="newUsername"></div>
+    <div class="form-row"><label for="newEmail">Email</label><input type="text" id="newEmail"></div>
+    <div class="form-row"><label for="newPassword">Password</label><input type="password" id="newPassword"></div>
+    <div class="form-row">
+      <label for="newRole">Role</label>
+      <select id="newRole" style="width:100%;padding:8px 10px;border-radius:var(--radius);border:0.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary)"></select>
+    </div>
+    <button class="btn" id="createBtn" onclick="createUser()">Create</button>
+    <div id="createStatus" style="margin-top:10px;font-size:12px;color:var(--text-secondary)"></div>
+  </div>
+
+  <div id="content" class="loading">Loading…</div>
+</div>
+</div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
+let roles = [];
+
+async function loadRoles() {
+  roles = await Api.listRoles();
+  document.getElementById('newRole').innerHTML = roles.map(r => `<option value="${r.name}">${r.name}</option>`).join('');
+}
+
+function roleOptions(selected) {
+  return roles.map(r => `<option value="${r.name}" ${r.name === selected ? 'selected' : ''}>${r.name}</option>`).join('');
+}
+
+async function loadUsers() {
+  const el = document.getElementById('content');
+  try {
+    const users = await Api.listUsers();
+    el.className = '';
+    el.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Active</th><th>Created</th><th></th></tr></thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td>${u.username}</td>
+              <td>${u.email}</td>
+              <td><select id="role-${u.id}" style="padding:4px 8px;border-radius:var(--radius);border:0.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary)">${roleOptions(u.roleName)}</select></td>
+              <td><input type="checkbox" id="active-${u.id}" ${u.active ? 'checked' : ''}></td>
+              <td>${new Date(u.createdAtUtc).toLocaleDateString()}</td>
+              <td><button class="btn small secondary" onclick="saveUser(${u.id}, '${u.email}')">Save</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+async function saveUser(id, email) {
+  const roleName = document.getElementById(`role-${id}`).value;
+  const active = document.getElementById(`active-${id}`).checked;
+  try {
+    await Api.updateUser(id, { email, roleName, active });
+    loadUsers();
+  } catch (err) {
+    alert('Could not update: ' + err.message);
+  }
+}
+
+async function createUser() {
+  const btn = document.getElementById('createBtn');
+  const status = document.getElementById('createStatus');
+  btn.disabled = true;
+  try {
+    const username = document.getElementById('newUsername').value.trim();
+    const email = document.getElementById('newEmail').value.trim();
+    const password = document.getElementById('newPassword').value;
+    const roleName = document.getElementById('newRole').value;
+    await Api.createUser({ username, email, password, roleName });
+    status.textContent = 'Created.';
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newEmail').value = '';
+    document.getElementById('newPassword').value = '';
+    loadUsers();
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+(async () => {
+  await loadRoles();
+  await loadUsers();
+})();
+</script>
+</body>
+</html>
