@@ -66,8 +66,24 @@ public static class ExamsEndpoints
         {
             var callerId = CurrentUser.Id(http.User);
             var (exam, blueprint, warnings) = await svc.GenerateAsync(req ?? new GenerateExamRequest(), callerId);
-            audit.Log(http, "CreatePaper", "Exam", exam.Id, "Generated paper");
+            var questionCount = blueprint.Sum(b => b.TargetCount);
+            audit.Log(http, "CreatePaper", "Exam", exam.Id, $"'{exam.Title}' ({questionCount} questions)");
             return Results.Ok(new GenerateExamResponse(exam.Id, blueprint, warnings));
+        }).RequirePermission("paper:create");
+
+        group.MapPost("/drill/from-wrong-book", async (DrillRequest? req, DrillGenerationService svc, HttpContext http, IAuditLogService audit) =>
+        {
+            var callerId = CurrentUser.Id(http.User);
+            try
+            {
+                var (exam, coreCount, fillCount, warnings) = await svc.GenerateFromWrongBookAsync(callerId, req ?? new DrillRequest());
+                audit.Log(http, "CreatePaper", "Exam", exam.Id, $"'{exam.Title}' ({coreCount + fillCount} questions, drill from wrong-question book)");
+                return Results.Ok(new WrongBookDrillResponse(exam.Id, coreCount, fillCount, warnings));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         }).RequirePermission("paper:create");
 
         group.MapPost("/drill/{attemptId:int}", async (int attemptId, DrillRequest? req, DrillGenerationService svc, HttpContext http, IAuditLogService audit) =>
@@ -77,7 +93,7 @@ public static class ExamsEndpoints
             try
             {
                 var (exam, weakAreaSummary, coreCount, fillCount, warnings) = await svc.GenerateAsync(attemptId, req ?? new DrillRequest(), callerId, isAdmin);
-                audit.Log(http, "CreatePaper", "Exam", exam.Id, $"Generated drill from attempt {attemptId}");
+                audit.Log(http, "CreatePaper", "Exam", exam.Id, $"'{exam.Title}' ({coreCount + fillCount} questions, drill from attempt {attemptId})");
                 return Results.Ok(new DrillResponse(exam.Id, weakAreaSummary, coreCount, fillCount, warnings));
             }
             catch (InvalidOperationException ex)

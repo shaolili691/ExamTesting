@@ -13,7 +13,7 @@
 <div id="topBarRoot" class="top-bar"></div>
 <div class="container">
   <div class="page-header"><h1>Targeted practice</h1></div>
-  <div id="content" class="loading">Building your drill from this attempt's weak areas…</div>
+  <div id="content" class="loading">Building your practice paper…</div>
 </div>
 </div>
 </div>
@@ -28,19 +28,21 @@ Nav.render();
 
 const params = new URLSearchParams(location.search);
 const attemptId = Number(params.get('attemptId'));
+const fromWrongBook = params.get('source') === 'wrong-book';
 
 async function build() {
   const el = document.getElementById('content');
   try {
-    const result = await Api.generateDrill(attemptId, {});
-    const weakest = result.weakAreaSummary.slice(0, 3);
+    const result = fromWrongBook ? await Api.generateWrongBookDrill({}) : await Api.generateDrill(attemptId, {});
+    const weakest = (result.weakAreaSummary || []).slice(0, 3);
     const weakText = weakest.map(c => `${c.chapter} (${c.accuracyPct}% on ${c.questionsSeen} questions)`).join(', ');
+    const banner = fromWrongBook
+      ? `This drill covers every question currently in your wrong-question book, plus extra practice from the same chapters/topics. A question drops out of the book automatically once you answer it correctly 3 times.`
+      : `This drill focuses on the areas you missed in attempt #${attemptId}, weighted toward your weakest chapters: ${weakText || 'n/a'}.`;
 
     el.className = '';
     el.innerHTML = `
-      <div class="weak-banner">
-        This drill focuses on the areas you missed in attempt #${attemptId}, weighted toward your weakest chapters: ${weakText || 'n/a'}.
-      </div>
+      <div class="weak-banner">${banner}</div>
       <div class="metric-grid">
         <div class="metric"><div class="metric-label">Missed questions included</div><div class="metric-value">${result.coreWrongCount}</div></div>
         <div class="metric"><div class="metric-label">Additional practice questions</div><div class="metric-value">${result.fillCount}</div></div>

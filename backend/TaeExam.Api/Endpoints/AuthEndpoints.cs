@@ -46,6 +46,15 @@ public static class AuthEndpoints
             return Results.Ok();
         }).RequireAuthorization();
 
+        group.MapPost("/change-password", async (ChangePasswordRequest req, AuthService auth, IAuditLogService audit, HttpContext http) =>
+        {
+            var userId = CurrentUser.Id(http.User);
+            var (success, error) = await auth.ChangePasswordAsync(userId, req.OldPassword, req.NewPassword, req.ConfirmPassword);
+            if (!success) return Results.BadRequest(new { error });
+            audit.Log(http, "ChangePassword", "User", userId);
+            return Results.Ok();
+        }).RequireAuthorization();
+
         group.MapGet("/me", async (AppDbContext db, HttpContext http) =>
         {
             var userId = CurrentUser.Id(http.User);

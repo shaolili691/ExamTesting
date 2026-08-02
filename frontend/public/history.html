@@ -31,6 +31,10 @@ function statusBadge(a) {
   return a.passed ? '<span class="badge b-pass">Pass</span>' : '<span class="badge b-fail">Fail</span>';
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 async function load() {
   const el = document.getElementById('content');
   try {
@@ -40,13 +44,15 @@ async function load() {
       el.textContent = 'No attempts yet — take an exam from the dashboard first.';
       return;
     }
+    const isAdmin = Auth.getUser()?.roleName === 'Administrator';
     el.className = '';
     el.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Exam</th><th>Type</th><th>Score</th><th>Result</th><th>Submitted</th><th></th></tr></thead>
+        <thead><tr>${isAdmin ? '<th>Who</th>' : ''}<th>Exam</th><th>Type</th><th>Score</th><th>Result</th><th>Submitted</th><th></th></tr></thead>
         <tbody>
           ${attempts.map(a => `
             <tr>
+              ${isAdmin ? `<td>${escapeHtml(a.username || '—')}</td>` : ''}
               <td>${a.examTitle}</td>
               <td>${a.examType}</td>
               <td>${a.status === 'Submitted' ? `${a.score}/${a.maxScore} (${a.percentScore}%)` : '—'}</td>

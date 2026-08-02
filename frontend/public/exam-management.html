@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exam Management — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
+<div class="container">
+  <div class="page-header"><h1>Exam Management</h1></div>
+
+  <div id="listView">
+    <p class="meta" style="color:var(--text-secondary);font-size:13px;margin-top:-8px">
+      Shared system exams only (seeded + PDF-imported) — student-generated practice/drill papers aren't listed here.
+    </p>
+    <div id="examListContent" class="loading">Loading…</div>
+  </div>
+
+  <div id="detailView" style="display:none">
+    <a href="exam-management.html" id="backLink">&larr; All exams</a>
+    <h2 id="examTitle" style="font-size:16px;font-weight:600;margin:10px 0 6px"></h2>
+    <div class="weak-banner">
+      Correct answers and explanations live on the shared question, not this one exam — saving here applies everywhere that question is used (including future generated practice papers), but never changes already-submitted results.
+    </div>
+    <div class="exam-layout" style="margin-top:16px">
+      <div class="exam-sidebar" id="qNavGrid"></div>
+      <div class="exam-main"><div id="questionEditor"></div></div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
+const params = new URLSearchParams(location.search);
+const examId = params.get('examId') ? Number(params.get('examId')) : null;
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function chapterBadge(chapter, title) { return `<span class="badge b-ch" title="${escapeHtml(title || '')}">${chapter}</span>`; }
+function levelBadge(level) { return level ? `<span class="badge b-k${level.slice(1)}">${level}</span>` : ''; }
+
+async function loadList() {
+  const el = document.getElementById('examListContent');
+  try {
+    const exams = await Api.listManagedExams();
+    if (exams.length === 0) {
+      el.className = 'empty-state';
+      el.textContent = 'No shared exams found.';
+      return;
+    }
+    el.className = '';
+    el.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Title</th><th>Type</th><th>Questions</th><th>Total pts</th><th>Source</th><th>Created</th></tr></thead>
+        <tbody>
+          ${exams.map(e => `
+            <tr>
+              <td><a href="exam-management.html?examId=${e.id}">${escapeHtml(e.title)}</a></td>
+              <td>${e.type}</td>
+              <td>${e.questionCount}</td>
+              <td>${e.totalPoints}</td>
+              <td>${e.sourceFile ? escapeHtml(e.sourceFile) : '—'}</td>
+              <td>${new Date(e.createdAtUtc).toLocaleDateString()}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    el.className = 'empty-state';
+    el.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+let examQuestions = [];
+let currentIndex = 0;
+
+function optionsEditorHtml(q, draftCorrect) {
+  const inputType = q.isMultiChoice ? 'checkbox' : 'radio';
+  return q.options.map((opt, i) => `
+    <label class="opt">
+      <input type="${inputType}" name="correct-${q.id}" value="${i}" ${draftCorrect.has(i) ? 'checked' : ''}>
+      <span class="opt-letter">${String.fromCharCode(65 + i)}</span>
+      <span class="opt-text">${escapeHtml(opt)}</span>
+    </label>`).join('');
+}
+
+function renderNavGrid() {
+  document.getElementById('qNavGrid').innerHTML = examQuestions.map((q, i) =>
+    `<button type="button" class="qnav-btn${i === currentIndex ? ' current' : ''}${q.savedThisSession ? ' correct' : ''}" data-index="${i}" title="Q${i + 1} · ${q.chapter}">${i + 1}</button>`
+  ).join('');
+  document.querySelectorAll('#qNavGrid .qnav-btn').forEach((btn) => {
+    btn.addEventListener('click', () => showQuestion(Number(btn.getAttribute('data-index'))));
+  });
+}
+
+function showQuestion(i) {
+  currentIndex = i;
+  const q = examQuestions[i];
+  const draftCorrect = new Set(q.correctIndexes);
+
+  document.getElementById('questionEditor').innerHTML = `
+    <div class="q-block">
+      <div class="q-meta">
+        ${chapterBadge(q.chapter, q.chapterTitle)} ${levelBadge(q.level)}
+        <span class="badge b-neutral">Q${i + 1} · ${q.points} pt${q.points === 1 ? '' : 's'}</span>
+        ${q.isMultiChoice ? '<span class="badge b-neutral">Multi-select</span>' : ''}
+      </div>
+      ${q.scenarioText ? `<div class="q-scenario">${escapeHtml(q.scenarioText)}</div>` : ''}
+      <div class="q-text">${escapeHtml(q.questionText)}</div>
+      <div class="q-opts" id="optsBox">${optionsEditorHtml(q, draftCorrect)}</div>
+      ${q.isMultiChoice ? '<div class="sel-note">Select all correct options.</div>' : ''}
+      ${q.usedInOtherExams.length > 0 ? `<div class="sel-note">This question also appears in: ${q.usedInOtherExams.map(escapeHtml).join(', ')}</div>` : ''}
+      <div class="form-row" style="margin-top:12px">
+        <label for="explanationBox">Explanation</label>
+        <textarea id="explanationBox" rows="4" style="width:100%;padding:8px 10px;border-radius:var(--radius);border:0.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary);font-size:13px;font-family:inherit">${escapeHtml(q.explanation)}</textarea>
+      </div>
+      <button class="btn" id="saveQuestionBtn">Save</button>
+      <span id="saveStatus" style="margin-left:10px;font-size:12px;color:var(--text-secondary)"></span>
+    </div>`;
+
+  document.getElementById('saveQuestionBtn').addEventListener('click', () => saveQuestion(q));
+}
+
+async function saveQuestion(q) {
+  const btn = document.getElementById('saveQuestionBtn');
+  const status = document.getElementById('saveStatus');
+  const checked = Array.from(document.querySelectorAll(`#optsBox input[name="correct-${q.id}"]:checked`)).map(i => Number(i.value));
+  const explanation = document.getElementById('explanationBox').value.trim();
+
+  btn.disabled = true;
+  status.textContent = '';
+  status.style.color = 'var(--text-secondary)';
+  try {
+    await Api.updateQuestionAnswer(q.id, { correctIndexes: checked, explanation });
+    q.correctIndexes = checked;
+    q.explanation = explanation;
+    q.savedThisSession = true;
+    status.textContent = 'Saved.';
+    renderNavGrid();
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+    status.style.color = 'var(--orange-text)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadDetail() {
+  document.getElementById('listView').style.display = 'none';
+  document.getElementById('detailView').style.display = '';
+  try {
+    const res = await Api.getManagedExamQuestions(examId);
+    document.getElementById('examTitle').textContent = res.examTitle;
+    examQuestions = res.questions.map(q => ({ ...q, savedThisSession: false }));
+    currentIndex = 0;
+    renderNavGrid();
+    showQuestion(0);
+  } catch (err) {
+    document.getElementById('questionEditor').innerHTML = `<p class="empty-state">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+if (examId) {
+  loadDetail();
+} else {
+  loadList();
+}
+</script>
+</body>
+</html>

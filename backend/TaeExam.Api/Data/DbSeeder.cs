@@ -31,8 +31,10 @@ public static class DbSeeder
             db.SaveChanges();
         }
 
-        if (!db.RolePermissions.Any())
         {
+            // Per-key upsert (not a single "table empty" guard) so that a permission added after
+            // go-live — e.g. question:manage — still gets its default role assignment seeded into
+            // an already-running database instead of silently having no roles granted anywhere.
             var allRoles = new[] { RoleNames.Administrator, RoleNames.Teacher, RoleNames.Student };
             var adminAndTeacher = new[] { RoleNames.Administrator, RoleNames.Teacher };
             var adminOnly = new[] { RoleNames.Administrator };
@@ -47,6 +49,7 @@ public static class DbSeeder
                 ["wrongquestion:view"] = allRoles,
                 ["announcement:view"] = allRoles,
                 ["exam:import"] = adminAndTeacher,
+                ["question:manage"] = adminAndTeacher,
                 ["announcement:manage"] = adminOnly,
                 ["user:view"] = adminOnly,
                 ["user:manage"] = adminOnly,
@@ -54,14 +57,20 @@ public static class DbSeeder
                 ["permission:manage"] = adminOnly,
             };
 
+            var existing = db.RolePermissions.Select(rp => rp.PermissionKey + "|" + rp.RoleName).ToHashSet();
+            var added = false;
             foreach (var (key, roles) in defaults)
             {
                 foreach (var role in roles)
                 {
-                    db.RolePermissions.Add(new RolePermission { PermissionKey = key, RoleName = role });
+                    if (existing.Add(key + "|" + role))
+                    {
+                        db.RolePermissions.Add(new RolePermission { PermissionKey = key, RoleName = role });
+                        added = true;
+                    }
                 }
             }
-            db.SaveChanges();
+            if (added) db.SaveChanges();
         }
 
         // Bootstrap: a fresh database has no way to reach Administrator-only endpoints (user

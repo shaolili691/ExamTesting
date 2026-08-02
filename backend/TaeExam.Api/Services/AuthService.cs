@@ -100,6 +100,28 @@ public class AuthService(AppDbContext db, IConfiguration config)
         return AuthResult.Ok(response);
     }
 
+    public async Task<(bool Success, string? Error)> ChangePasswordAsync(int userId, string oldPassword, string newPassword, string confirmPassword)
+    {
+        if (newPassword != confirmPassword)
+        {
+            return (false, "New password and confirmation do not match");
+        }
+        if (newPassword.Length < 6)
+        {
+            return (false, "New password must be at least 6 characters");
+        }
+
+        var user = await db.Users.FirstAsync(u => u.Id == userId);
+        if (!BCrypt.Net.BCrypt.Verify(oldPassword, user.PasswordHash))
+        {
+            return (false, "Current password is incorrect");
+        }
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, workFactor: 11);
+        await db.SaveChangesAsync();
+        return (true, null);
+    }
+
     public async Task LogoutAsync(string rawToken)
     {
         var tokenHash = Hash(rawToken);

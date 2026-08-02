@@ -39,8 +39,6 @@ const Auth = (() => {
     document.querySelectorAll('[data-admin-only]').forEach((el) => {
       el.style.display = isAdmin ? '' : 'none';
     });
-    const navUser = document.getElementById('navUser');
-    if (navUser) navUser.textContent = user.username;
   }
 
   async function refreshAccessToken() {

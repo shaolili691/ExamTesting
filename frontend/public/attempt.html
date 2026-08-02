@@ -53,6 +53,28 @@ function showTab(name) {
 
 function chapterBadge(chapter) { return `<span class="badge b-ch">${chapter}</span>`; }
 
+function optionsListHtml(q) {
+  const selected = new Set(q.selectedIndexes);
+  const correct = new Set(q.correctIndexes);
+  return q.options.map((opt, i) => {
+    const isCorrect = correct.has(i);
+    const wasSelected = selected.has(i);
+    const cls = ['opt', 'static'];
+    if (isCorrect) cls.push('opt-correct');
+    else if (wasSelected) cls.push('opt-wrong');
+    let tag = '';
+    if (isCorrect && wasSelected) tag = '<span class="opt-tag opt-tag-correct">Your answer · Correct</span>';
+    else if (isCorrect) tag = '<span class="opt-tag opt-tag-correct">Correct answer</span>';
+    else if (wasSelected) tag = '<span class="opt-tag opt-tag-wrong">Your answer</span>';
+    return `
+      <div class="${cls.join(' ')}">
+        <span class="opt-letter">${String.fromCharCode(65 + i)}</span>
+        <span class="opt-text">${opt}</span>
+        ${tag}
+      </div>`;
+  }).join('');
+}
+
 function renderAnswerKey(result) {
   const rows = result.questions.map(q => `
     <tr>
@@ -68,25 +90,44 @@ function renderAnswerKey(result) {
     </table>`;
 }
 
+let reviewQuestions = [];
+let reviewIndex = 0;
+
+function questionCardHtml(q, i) {
+  const answered = q.selectedIndexes.length > 0;
+  const cls = !answered ? 'skipped' : (q.isCorrect ? 'correct' : 'wrong');
+  return `
+    <div class="ans-card ${cls}">
+      <div class="ans-qnum">Q${i + 1} · ${q.chapter} · ${q.pointsAwarded}/${q.points} pts</div>
+      ${q.scenarioText ? `<div class="q-scenario">${q.scenarioText}</div>` : ''}
+      <div class="q-text">${q.questionText}</div>
+      <div class="q-opts">${optionsListHtml(q)}</div>
+      ${!answered ? '<div class="sel-note">You left this question unanswered.</div>' : ''}
+      <div class="ans-expl" style="margin-top:8px">${q.explanation}</div>
+    </div>`;
+}
+
+function showQuestion(i) {
+  reviewIndex = i;
+  document.getElementById('reviewQuestionCard').innerHTML = questionCardHtml(reviewQuestions[i], i);
+  document.querySelectorAll('.qnav-btn[data-index]').forEach((btn) => {
+    btn.classList.toggle('current', Number(btn.getAttribute('data-index')) === i);
+  });
+}
+
 function renderResults(result) {
   document.getElementById('pageTitle').textContent = `Attempt review — ${result.examTitle}`;
+  reviewQuestions = result.questions;
   const pct = result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0;
   const chCards = result.chapterBreakdown.map(c => `
     <div class="ch-card">
       <div class="ch-card-title">${c.chapter} — ${c.chapterTitle}</div>
       <div class="ch-card-score">${c.correct}/${c.total} · ${c.pointsEarned}/${c.pointsMax} pts</div>
     </div>`).join('');
-  const cards = result.questions.map(q => {
+  const navButtons = result.questions.map((q, i) => {
     const answered = q.selectedIndexes.length > 0;
-    const cls = !answered ? 'skipped' : (q.isCorrect ? 'correct' : 'wrong');
-    const yourAnswer = answered ? q.selectedIndexes.map(i => q.options[i]).join(', ') : '(skipped)';
-    const answerCls = !answered ? 'ans-skip-text' : (q.isCorrect ? 'ans-correct-text' : 'ans-wrong-text');
-    return `
-      <div class="ans-card ${cls}">
-        <div class="ans-qnum">${q.chapter} · ${q.pointsAwarded}/${q.points} pts</div>
-        <div class="ans-answer ${answerCls}">${yourAnswer}</div>
-        <div class="ans-expl">${q.explanation}</div>
-      </div>`;
+    const state = !answered ? 'skip' : (q.isCorrect ? 'correct' : 'wrong');
+    return `<button type="button" class="qnav-btn ${state}${i === 0 ? ' current' : ''}" data-index="${i}" title="Q${i + 1} · ${q.chapter} · ${q.pointsAwarded}/${q.points} pts">${i + 1}</button>`;
   }).join('');
 
   document.getElementById('reviewContent').innerHTML = `
@@ -97,8 +138,16 @@ function renderResults(result) {
     </div>
     <div class="ch-summary">${chCards}</div>
     <div class="section-title">Question-by-question review</div>
-    <div class="ans-grid">${cards}</div>
+    <div class="exam-layout">
+      <div class="exam-sidebar">${navButtons}</div>
+      <div class="exam-main"><div id="reviewQuestionCard"></div></div>
+    </div>
   `;
+
+  document.querySelectorAll('.qnav-btn[data-index]').forEach((btn) => {
+    btn.addEventListener('click', () => showQuestion(Number(btn.getAttribute('data-index'))));
+  });
+  showQuestion(0);
 }
 
 async function load() {

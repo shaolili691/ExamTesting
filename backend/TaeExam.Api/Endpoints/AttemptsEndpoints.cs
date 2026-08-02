@@ -143,7 +143,11 @@ public static class AttemptsEndpoints
             attempt.SubmittedAtUtc = DateTime.UtcNow;
 
             await db.SaveChangesAsync();
-            audit.Log(http, "SubmitExam", "Attempt", attempt.Id, $"Score {score}/{maxScore}");
+            var elapsedSeconds = attempt.SubmittedAtUtc.HasValue
+                ? (int)(attempt.SubmittedAtUtc.Value - attempt.StartedAtUtc).TotalSeconds
+                : (int?)null;
+            audit.Log(http, "SubmitExam", "Attempt", attempt.Id,
+                $"'{attempt.Exam.Title}', score {score}/{maxScore}, took {elapsedSeconds}s");
 
             var result = await ScoringService.BuildAttemptResultAsync(db, attempt.Id);
             return Results.Ok(result);
@@ -161,8 +165,15 @@ public static class AttemptsEndpoints
 
             var attempts = await query.OrderByDescending(a => a.StartedAtUtc).ToListAsync();
 
+            // Only admins see a mix of everyone's attempts, so only admins need the "who" column —
+            // a student's own history is implicitly all theirs.
+            var usernames = isAdmin
+                ? await db.Users.Where(u => attempts.Select(a => a.UserId).Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Username)
+                : new Dictionary<int, string>();
+
             var dtos = attempts
-                .Select(a => new AttemptSummaryDto(a.Id, a.ExamId, a.Exam!.Title, a.Exam.Type.ToString(), a.Score, a.MaxScore, a.PercentScore, a.Passed, a.SubmittedAtUtc, a.Status.ToString()))
+                .Select(a => new AttemptSummaryDto(a.Id, a.ExamId, a.Exam!.Title, a.Exam.Type.ToString(), a.Score, a.MaxScore, a.PercentScore, a.Passed, a.SubmittedAtUtc, a.Status.ToString(),
+                    isAdmin ? usernames.GetValueOrDefault(a.UserId) : null))
                 .ToList();
             return Results.Ok(dtos);
         });

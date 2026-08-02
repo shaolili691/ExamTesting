@@ -39,8 +39,24 @@ public record RegisterRequest(string Username, string Email, string Password);
 public record LoginRequest(string Username, string Password);
 public record RefreshRequest(string RefreshToken);
 public record LogoutRequest(string RefreshToken);
+public record ChangePasswordRequest(string OldPassword, string NewPassword, string ConfirmPassword);
 
 public record UserSummaryDto(int Id, string Username, string Email, string RoleName);
+
+public record UserProfileDto(
+    int Id,
+    string Username,
+    string Email,
+    string RoleName,
+    string? RealName,
+    int? Age,
+    string? Gender,
+    DateOnly? BirthDate,
+    string? Phone,
+    string? AvatarUrl,
+    DateTime CreatedAtUtc);
+
+public record UserActivityDto(DateTime CreatedAtUtc, string Action, string Description);
 
 public record AuthResponse(string AccessToken, string RefreshToken, DateTime ExpiresAtUtc, UserSummaryDto User);
 
@@ -74,6 +90,7 @@ public record WrongQuestionDto(
     List<int> CorrectIndexes,
     List<int> LastSelectedIndexes,
     string Explanation,
+    int Points,
     DateTime LastMissedAtUtc,
     int TimesMissed);
 
@@ -156,7 +173,8 @@ public record AttemptSummaryDto(
     decimal PercentScore,
     bool Passed,
     DateTime? SubmittedAtUtc,
-    string Status);
+    string Status,
+    string? Username);
 
 public record OverallStatsDto(int TotalAttempts, decimal AvgPercent, decimal PassRate, int StudyTimeMinutes, int CompletedExams);
 
@@ -187,3 +205,31 @@ public record GenerateExamResponse(int ExamId, List<ChapterBlueprintDto> Bluepri
 public record DrillRequest(int? MaxQuestions = null);
 
 public record DrillResponse(int ExamId, List<ChapterAccuracyDto> WeakAreaSummary, int CoreWrongCount, int FillCount, List<string> Warnings);
+
+public record WrongBookDrillResponse(int ExamId, int CoreWrongCount, int FillCount, List<string> Warnings);
+
+// Exam management (试卷管理) — admin/teacher proofreading of shared exams' correct answers
+// and explanations. Scoped to Exam.UserId == null (Imported seed exams + Manual PDF imports),
+// never the private per-student Generated/Drill practice papers.
+public record ManagedExamDto(int Id, string Title, string Type, string? SourceFile, int QuestionCount, int TotalPoints, DateTime CreatedAtUtc);
+
+public record QuestionAdminDto(
+    int Id,
+    int OrderIndex,
+    string Chapter,
+    string? ChapterTitle,
+    string? Topic,
+    string? Level,
+    bool IsScenario,
+    string? ScenarioText,
+    string QuestionText,
+    List<string> Options,
+    bool IsMultiChoice,
+    List<int> CorrectIndexes,
+    string Explanation,
+    int Points,
+    List<string> UsedInOtherExams);
+
+public record ManagedExamQuestionsResponse(int ExamId, string ExamTitle, List<QuestionAdminDto> Questions);
+
+public record UpdateQuestionAnswerRequest(List<int> CorrectIndexes, string Explanation);

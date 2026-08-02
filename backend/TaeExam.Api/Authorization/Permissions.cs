@@ -12,6 +12,7 @@ public static class Permissions
         ("exam:review", "Review exam history"),
         ("paper:create", "Generate practice papers/drills"),
         ("exam:import", "Import exams"),
+        ("question:manage", "Manage exam questions (correct answers & explanations)"),
         ("analysis:view", "View analysis dashboard"),
         ("wrongquestion:view", "View wrong-question bank"),
         ("announcement:view", "View announcements"),

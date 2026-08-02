@@ -5,9 +5,24 @@ using TaeExam.Api.Models;
 
 namespace TaeExam.Api.Services;
 
-public class DrillGenerationService(AppDbContext db)
+public class DrillGenerationService(AppDbContext db, WrongQuestionService wrongQuestions)
 {
     private const decimal DefaultPassFraction = 0.65m;
+
+    public async Task<(Exam Exam, int CoreCount, int FillCount, List<string> Warnings)> GenerateFromWrongBookAsync(int callerUserId, DrillRequest req)
+    {
+        var open = await wrongQuestions.GetOpenWrongQuestionsAsync(callerUserId);
+        if (open.Count == 0)
+        {
+            throw new InvalidOperationException("Your wrong-question book is empty — nothing to practice.");
+        }
+
+        var coreQuestions = open.Select(o => o.Question).ToList();
+        var (exam, fillCount, warnings) = await BuildDrillExamAsync(
+            coreQuestions, req, callerUserId, "Practice: full wrong-question book", generatedFromAttemptId: null);
+
+        return (exam, coreQuestions.Count, fillCount, warnings);
+    }
 
     public async Task<(Exam Exam, List<ChapterAccuracyDto> WeakAreaSummary, int CoreCount, int FillCount, List<string> Warnings)> GenerateAsync(int attemptId, DrillRequest req, int callerUserId, bool isAdmin)
     {
@@ -53,11 +68,26 @@ public class DrillGenerationService(AppDbContext db)
             throw new InvalidOperationException("This attempt has no wrong or unanswered questions — nothing to drill.");
         }
 
+        var (exam, fillCount, buildWarnings) = await BuildDrillExamAsync(
+            coreQuestions, req, callerUserId, $"Targeted drill from attempt #{attemptId}", generatedFromAttemptId: attemptId, excludeQuestionIds: sourceQuestionIds);
+        warnings.AddRange(buildWarnings);
+
+        return (exam, weakAreaSummary, coreQuestions.Count, fillCount, warnings);
+    }
+
+    // Shared by both drill flavors: picks fill-in questions from the same chapters/topics as the
+    // core (missed) questions, then persists a new Drill exam.
+    private async Task<(Exam Exam, int FillCount, List<string> Warnings)> BuildDrillExamAsync(
+        List<Question> coreQuestions, DrillRequest req, int callerUserId, string title, int? generatedFromAttemptId, HashSet<int>? excludeQuestionIds = null)
+    {
+        var warnings = new List<string>();
+        var excluded = excludeQuestionIds ?? coreQuestions.Select(q => q.Id).ToHashSet();
+
         var touchedChapterTopics = coreQuestions.Select(q => (q.Chapter, q.Topic)).Distinct().ToList();
         var touchedChapters = touchedChapterTopics.Select(t => t.Chapter).ToHashSet();
 
         var candidatePool = await db.Questions
-            .Where(q => touchedChapters.Contains(q.Chapter) && !sourceQuestionIds.Contains(q.Id))
+            .Where(q => touchedChapters.Contains(q.Chapter) && !excluded.Contains(q.Id))
             .ToListAsync();
 
         bool SameTopicMatch(Question q) =>
@@ -77,7 +107,7 @@ public class DrillGenerationService(AppDbContext db)
         var fillPicks = rankedFill.Take(fillNeeded).ToList();
         if (fillPicks.Count < fillNeeded)
         {
-            warnings.Add($"Only {fillPicks.Count} fill question(s) available for the weak chapters/topics touched by this attempt (wanted {fillNeeded}).");
+            warnings.Add($"Only {fillPicks.Count} fill question(s) available for the weak chapters/topics (wanted {fillNeeded}).");
         }
 
         var allPicks = coreQuestions.Concat(fillPicks).ToList();
@@ -88,9 +118,9 @@ public class DrillGenerationService(AppDbContext db)
 
         var exam = new Exam
         {
-            Title = $"Targeted drill from attempt #{attemptId}",
+            Title = title,
             Type = ExamType.Drill,
-            GeneratedFromAttemptId = attemptId,
+            GeneratedFromAttemptId = generatedFromAttemptId,
             TotalPoints = totalPoints,
             PassThresholdPoints = passThreshold,
             TimeLimitMinutes = timeLimitMinutes,
@@ -113,6 +143,6 @@ public class DrillGenerationService(AppDbContext db)
         }
         await db.SaveChangesAsync();
 
-        return (exam, weakAreaSummary, coreQuestions.Count, fillPicks.Count, warnings);
+        return (exam, fillPicks.Count, warnings);
     }
 }

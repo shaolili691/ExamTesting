@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Personal Center — TAE Exam System</title>
+<link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+<div class="layout">
+<div id="sidebarRoot" class="sidebar"></div>
+<div class="main-content">
+<div id="topBarRoot" class="top-bar"></div>
+<div class="container">
+  <div class="page-header"><h1>Profile</h1></div>
+
+  <div class="profile-header">
+    <span class="avatar avatar-lg" id="headerAvatar" aria-hidden="true"></span>
+    <div>
+      <div class="name" id="headerName"></div>
+      <div class="sub" id="headerRole"></div>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('activity')">Activity</button>
+    <button class="tab-btn" onclick="showTab('profile')">Edit Profile</button>
+    <button class="tab-btn" onclick="showTab('password')">Change Password</button>
+  </div>
+
+  <!-- 用户动态 -->
+  <div id="activity" class="tab-panel show">
+    <div id="timelineBox" class="loading">Loading…</div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn small secondary" id="loadMoreBtn" style="display:none" onclick="loadMoreActivities()">Load more</button>
+    </div>
+  </div>
+
+  <!-- 资料修改 -->
+  <div id="profile" class="tab-panel">
+    <div class="card" style="max-width:640px">
+      <div id="profileError"></div>
+      <div class="form-grid">
+        <div class="form-row">
+          <label for="realName">Real name</label>
+          <input type="text" id="realName" maxlength="50">
+        </div>
+        <div class="form-row">
+          <label for="age">Age</label>
+          <input type="number" id="age" min="0" max="150">
+        </div>
+        <div class="form-row">
+          <label for="gender">Gender</label>
+          <select id="gender">
+            <option value="">(unspecified)</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="birthDate">Birth date</label>
+          <input type="date" id="birthDate">
+        </div>
+        <div class="form-row">
+          <label for="phone">Phone</label>
+          <input type="text" id="phone" placeholder="e.g. 13800138000">
+          <div class="field-hint">7–15 digits, optional leading +</div>
+        </div>
+        <div class="form-row">
+          <label for="email">Email</label>
+          <input type="text" id="email">
+        </div>
+        <div class="form-row" style="grid-column:1/-1">
+          <label>Avatar</label>
+          <div class="avatar-upload-row">
+            <span class="avatar avatar-lg" id="avatarPreview" aria-hidden="true"></span>
+            <div>
+              <input type="file" id="avatarFile" accept="image/*">
+              <div class="field-hint">JPG or PNG, resized automatically. <a href="#" id="removeAvatarLink">Remove avatar</a></div>
+            </div>
+          </div>
+          <input type="hidden" id="avatarUrl">
+        </div>
+      </div>
+      <button class="btn" id="saveProfileBtn" onclick="saveProfile()">Save changes</button>
+      <div id="profileStatus" style="margin-top:10px;font-size:12px;color:var(--text-secondary)"></div>
+    </div>
+  </div>
+
+  <!-- 密码修改 -->
+  <div id="password" class="tab-panel">
+    <div class="card" style="max-width:420px">
+      <div id="passwordError"></div>
+      <div class="form-row">
+        <label for="oldPassword">Current password</label>
+        <div class="field-icon-wrap">
+          <input type="password" id="oldPassword" autocomplete="current-password">
+          <button type="button" class="field-icon field-icon-btn" data-toggle="oldPassword" aria-label="Show password"></button>
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="newPassword">New password</label>
+        <div class="field-icon-wrap">
+          <input type="password" id="newPassword" autocomplete="new-password">
+          <button type="button" class="field-icon field-icon-btn" data-toggle="newPassword" aria-label="Show password"></button>
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="confirmPassword">Confirm new password</label>
+        <div class="field-icon-wrap">
+          <input type="password" id="confirmPassword" autocomplete="new-password">
+          <button type="button" class="field-icon field-icon-btn" data-toggle="confirmPassword" aria-label="Show password"></button>
+        </div>
+      </div>
+      <button class="btn" id="savePasswordBtn" onclick="changePassword()">Update password</button>
+      <div id="passwordStatus" style="margin-top:10px;font-size:12px;color:var(--text-secondary)"></div>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+Auth.requireLogin();
+Auth.applyRoleNav();
+Nav.render();
+
+const EYE_SVG = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.8" stroke="currentColor" stroke-width="1.6"/></svg>';
+document.querySelectorAll('.field-icon-btn[data-toggle]').forEach(btn => {
+  btn.innerHTML = EYE_SVG;
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.getAttribute('data-toggle'));
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  });
+});
+
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('show'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('show');
+  const idx = ['activity', 'profile', 'password'].indexOf(id);
+  document.querySelectorAll('.tab-btn')[idx].classList.add('active');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function avatarInitial(name) {
+  return name ? name.charAt(0).toUpperCase() : '?';
+}
+
+let activityPage = 1;
+const ACTIVITY_PAGE_SIZE = 20;
+let activityTotal = 0;
+let activityLoaded = 0;
+
+function renderActivityItems(items, append) {
+  const box = document.getElementById('timelineBox');
+  const html = items.map(a => `
+    <div class="timeline-item">
+      <div class="timeline-time">${new Date(a.createdAtUtc).toLocaleString()}</div>
+      <div class="timeline-desc">${escapeHtml(a.description)}</div>
+    </div>`).join('');
+  if (append) {
+    box.insertAdjacentHTML('beforeend', html);
+  } else {
+    box.className = 'timeline';
+    box.innerHTML = html;
+  }
+}
+
+async function loadActivities() {
+  const box = document.getElementById('timelineBox');
+  try {
+    const res = await Api.getMyActivities({ page: 1, pageSize: ACTIVITY_PAGE_SIZE });
+    activityPage = 1;
+    activityTotal = res.total;
+    activityLoaded = res.items.length;
+    if (res.items.length === 0) {
+      box.className = 'empty-state';
+      box.textContent = 'No activity yet.';
+    } else {
+      renderActivityItems(res.items, false);
+    }
+    document.getElementById('loadMoreBtn').style.display = activityLoaded < activityTotal ? '' : 'none';
+  } catch (err) {
+    box.className = 'empty-state';
+    box.textContent = 'Could not reach the backend API: ' + err.message;
+  }
+}
+
+async function loadMoreActivities() {
+  activityPage += 1;
+  const res = await Api.getMyActivities({ page: activityPage, pageSize: ACTIVITY_PAGE_SIZE });
+  activityLoaded += res.items.length;
+  renderActivityItems(res.items, true);
+  document.getElementById('loadMoreBtn').style.display = activityLoaded < activityTotal ? '' : 'none';
+}
+
+function setAvatarImage(el, dataUrl, fallbackText) {
+  if (dataUrl) {
+    el.innerHTML = `<img src="${dataUrl}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+  } else {
+    el.textContent = fallbackText;
+  }
+}
+
+async function loadProfile() {
+  const profile = await Api.getMyProfile();
+  const fallback = avatarInitial(profile.realName || profile.username);
+  setAvatarImage(document.getElementById('headerAvatar'), profile.avatarUrl, fallback);
+  setAvatarImage(document.getElementById('avatarPreview'), profile.avatarUrl, fallback);
+  document.getElementById('headerName').textContent = profile.realName || profile.username;
+  document.getElementById('headerRole').textContent = `${profile.username} · ${profile.roleName}`;
+
+  document.getElementById('realName').value = profile.realName || '';
+  document.getElementById('age').value = profile.age ?? '';
+  document.getElementById('gender').value = profile.gender || '';
+  document.getElementById('birthDate').value = profile.birthDate || '';
+  document.getElementById('phone').value = profile.phone || '';
+  document.getElementById('email').value = profile.email || '';
+  document.getElementById('avatarUrl').value = profile.avatarUrl || '';
+}
+
+const MAX_AVATAR_SOURCE_BYTES = 5 * 1024 * 1024;
+const AVATAR_DIM = 160;
+
+function resizeImageToDataUrl(file, size) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Not a valid image'));
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('avatarFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const errorBox = document.getElementById('profileError');
+  errorBox.innerHTML = '';
+  if (!file.type.startsWith('image/')) {
+    errorBox.innerHTML = '<div class="auth-error">Please choose an image file.</div>';
+    e.target.value = '';
+    return;
+  }
+  if (file.size > MAX_AVATAR_SOURCE_BYTES) {
+    errorBox.innerHTML = '<div class="auth-error">Image must be smaller than 5MB.</div>';
+    e.target.value = '';
+    return;
+  }
+  try {
+    const dataUrl = await resizeImageToDataUrl(file, AVATAR_DIM);
+    document.getElementById('avatarUrl').value = dataUrl;
+    setAvatarImage(document.getElementById('avatarPreview'), dataUrl, '');
+  } catch (err) {
+    errorBox.innerHTML = `<div class="auth-error">${escapeHtml(err.message)}</div>`;
+  } finally {
+    e.target.value = '';
+  }
+});
+
+document.getElementById('removeAvatarLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  document.getElementById('avatarUrl').value = '';
+  const fallback = avatarInitial(document.getElementById('realName').value || Auth.getUser()?.username);
+  setAvatarImage(document.getElementById('avatarPreview'), null, fallback);
+});
+
+async function saveProfile() {
+  const btn = document.getElementById('saveProfileBtn');
+  const errorBox = document.getElementById('profileError');
+  const status = document.getElementById('profileStatus');
+  errorBox.innerHTML = '';
+  status.textContent = '';
+  btn.disabled = true;
+  try {
+    const ageVal = document.getElementById('age').value;
+    await Api.updateMyProfile({
+      email: document.getElementById('email').value.trim(),
+      realName: document.getElementById('realName').value.trim() || null,
+      age: ageVal === '' ? null : Number(ageVal),
+      gender: document.getElementById('gender').value || null,
+      birthDate: document.getElementById('birthDate').value || null,
+      phone: document.getElementById('phone').value.trim() || null,
+      avatarUrl: document.getElementById('avatarUrl').value.trim() || null,
+    });
+    status.textContent = 'Saved.';
+    const user = Auth.getUser();
+    if (user) { user.email = document.getElementById('email').value.trim(); Auth.setSession({ accessToken: Auth.getAccessToken(), refreshToken: Auth.getRefreshToken(), user }); }
+    loadProfile();
+    loadActivities();
+  } catch (err) {
+    errorBox.innerHTML = `<div class="auth-error">${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function changePassword() {
+  const btn = document.getElementById('savePasswordBtn');
+  const errorBox = document.getElementById('passwordError');
+  const status = document.getElementById('passwordStatus');
+  errorBox.innerHTML = '';
+  status.textContent = '';
+  btn.disabled = true;
+  try {
+    const oldPassword = document.getElementById('oldPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    await Api.changePassword(oldPassword, newPassword, confirmPassword);
+    status.textContent = 'Password updated.';
+    document.getElementById('oldPassword').value = '';
+    document.getElementById('newPassword').value = '';
+    document.getElementById('confirmPassword').value = '';
+    loadActivities();
+  } catch (err) {
+    errorBox.innerHTML = `<div class="auth-error">${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+(async () => {
+  await loadProfile();
+  await loadActivities();
+})();
+</script>
+</body>
+</html>

@@ -15,6 +15,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 builder.Services.AddScoped<AnalysisService>();
 builder.Services.AddScoped<PaperGenerationService>();
+builder.Services.AddScoped<WrongQuestionService>();
 builder.Services.AddScoped<DrillGenerationService>();
 builder.Services.AddScoped<ExamImportParsingService>();
 builder.Services.AddScoped<AuthService>();
@@ -71,6 +72,7 @@ app.MapAuditLogsEndpoints();
 app.MapAnnouncementsEndpoints();
 app.MapExamCategoriesEndpoints();
 app.MapExamImportEndpoints();
+app.MapExamManagementEndpoints();
 app.MapWrongQuestionsEndpoints();
 app.MapSyllabusEndpoints();
 app.MapExamsEndpoints();

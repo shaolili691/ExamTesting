@@ -5,11 +5,12 @@ const Nav = (() => {
   const CATEGORY_KEY = 'tae_category';
 
   const MENU_ITEMS = [
-    { label: 'History', href: 'history.html', permission: 'exam:review' },
+    { label: 'Exam History', href: 'history.html', permission: 'exam:review' },
     { label: 'Wrong Questions', href: 'wrong-questions.html', permission: 'wrongquestion:view' },
     { label: 'Analysis', href: 'analysis.html', permission: 'analysis:view' },
     { label: 'Generate', href: 'generate.html', permission: 'paper:create' },
     { label: 'Import Exam', href: 'import-exam.html', permission: 'exam:import' },
+    { label: 'Exam Management', href: 'exam-management.html', permission: 'question:manage' },
     { label: 'Users', href: 'users-admin.html', permission: 'user:view' },
     { label: 'Announcements', href: 'announcements-admin.html', permission: 'announcement:manage' },
     { label: 'Audit Log', href: 'audit-log.html', permission: 'audit:view' },
@@ -69,12 +70,45 @@ const Nav = (() => {
     const user = Auth.getUser();
     const topBar = document.getElementById('topBarRoot');
     if (topBar) {
+      const initial = user ? user.username.charAt(0).toUpperCase() : '?';
       topBar.innerHTML = `
-        <span id="navUser">${user ? escapeHtml(user.username) : ''}</span>
-        <a href="#" id="navLogout">Logout</a>
+        <div class="avatar-menu-wrap" id="avatarMenuWrap">
+          <button type="button" class="avatar-trigger" id="avatarTrigger" aria-haspopup="true" aria-expanded="false" title="${user ? escapeHtml(user.username) : ''}">
+            <span class="avatar" id="navAvatar">${initial}</span>
+          </button>
+          <div class="avatar-dropdown" id="avatarDropdown">
+            <a href="profile.html" class="avatar-dropdown-item">Profile</a>
+            <a href="#" class="avatar-dropdown-item" id="navLogout">Logout</a>
+          </div>
+        </div>
       `;
+
+      const trigger = document.getElementById('avatarTrigger');
+      const dropdown = document.getElementById('avatarDropdown');
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = dropdown.classList.toggle('show');
+        trigger.setAttribute('aria-expanded', String(open));
+      });
+      document.addEventListener('click', () => dropdown.classList.remove('show'));
+
       const logoutLink = document.getElementById('navLogout');
       if (logoutLink) logoutLink.addEventListener('click', (e) => { e.preventDefault(); Auth.logout(); });
+
+      // Progressive enhancement: swap the initials placeholder for the user's uploaded
+      // avatar, if one is set. Session storage only holds username/email/role, not
+      // avatarUrl, so this needs its own lightweight fetch.
+      if (user) {
+        Api.getMyProfile().then((profile) => {
+          if (profile.avatarUrl) {
+            const img = document.createElement('img');
+            img.src = profile.avatarUrl;
+            img.alt = '';
+            img.className = 'avatar';
+            document.getElementById('navAvatar').replaceWith(img);
+          }
+        }).catch(() => {});
+      }
     }
   }
 

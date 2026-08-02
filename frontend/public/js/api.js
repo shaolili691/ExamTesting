@@ -65,6 +65,8 @@ const Api = (() => {
     register: (username, email, password) => request('POST', '/api/auth/register', { username, email, password }),
     login: (username, password) => request('POST', '/api/auth/login', { username, password }),
     getMe: () => request('GET', '/api/auth/me'),
+    changePassword: (oldPassword, newPassword, confirmPassword) =>
+      request('POST', '/api/auth/change-password', { oldPassword, newPassword, confirmPassword }),
 
     // Syllabus / categories
     getSyllabusChapters: () => request('GET', '/api/syllabus-chapters'),
@@ -75,6 +77,7 @@ const Api = (() => {
     getExam: (id) => request('GET', `/api/exams/${id}`),
     generateExam: (opts) => request('POST', '/api/exams/generate', opts || {}),
     generateDrill: (attemptId, opts) => request('POST', `/api/exams/drill/${attemptId}`, opts || {}),
+    generateWrongBookDrill: (opts) => request('POST', '/api/exams/drill/from-wrong-book', opts || {}),
 
     // Attempts
     startAttempt: (examId) => request('POST', '/api/attempts', { examId }),
@@ -98,7 +101,9 @@ const Api = (() => {
     listUsers: () => request('GET', '/api/users'),
     createUser: (body) => request('POST', '/api/users', body),
     updateUser: (id, body) => request('PUT', `/api/users/${id}`, body),
+    getMyProfile: () => request('GET', '/api/users/me'),
     updateMyProfile: (body) => request('PUT', '/api/users/me', body),
+    getMyActivities: (params) => request('GET', withQuery('/api/users/me/activities', params)),
     listRoles: () => request('GET', '/api/users/roles'),
 
     // Role permissions (admin edits; every user reads their own effective set)
@@ -109,6 +114,11 @@ const Api = (() => {
 
     // Audit log (admin)
     listAuditLogs: (params) => request('GET', withQuery('/api/audit-logs', params)),
+
+    // Exam management (试卷管理 — Administrator/Teacher; correct-answer & explanation proofing)
+    listManagedExams: () => request('GET', '/api/exam-management/exams'),
+    getManagedExamQuestions: (examId) => request('GET', `/api/exam-management/exams/${examId}/questions`),
+    updateQuestionAnswer: (questionId, body) => request('PUT', `/api/exam-management/questions/${questionId}`, body),
 
     // Exam import (Administrator/Teacher)
     previewExamImport: (questionsFile, answersFile) => {
